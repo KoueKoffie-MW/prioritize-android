@@ -23,6 +23,8 @@ import com.example.prioritize.data.RecurrenceType
 import com.example.prioritize.data.SpecialDateType
 import com.example.prioritize.data.TaskRepository
 import com.example.prioritize.worker.DreamingWorker
+import com.example.prioritize.github.GitHubAuthManager
+import com.example.prioritize.github.GitHubIssueService
 import androidx.work.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -49,6 +51,87 @@ class TaskViewModel(
         val memInfo = android.app.ActivityManager.MemoryInfo()
         actManager.getMemoryInfo(memInfo)
         memInfo.totalMem / (1024.0 * 1024.0 * 1024.0)
+    }
+
+    // ── GitHub integration ───────────────────────────────────────────────────
+    val gitHubAuth = GitHubAuthManager(application)
+    private val gitHubIssueService = GitHubIssueService()
+
+    private val _isGitHubLoggingIn = MutableStateFlow(false)
+    val isGitHubLoggingIn = _isGitHubLoggingIn.asStateFlow()
+
+    /** True when a GitHub OAuth token is stored on-device. Recomputed on demand. */
+    private val _isGitHubLoggedIn = MutableStateFlow(gitHubAuth.isLoggedIn)
+    val isGitHubLoggedIn = _isGitHubLoggedIn.asStateFlow()
+
+    val gitHubUsername: String? get() = gitHubAuth.username
+
+    private val _feedbackSubmitState = MutableStateFlow<FeedbackSubmitState>(FeedbackSubmitState.Idle)
+    val feedbackSubmitState = _feedbackSubmitState.asStateFlow()
+
+    /** Initiates the GitHub Device Flow. Opens the browser for the user to authorize. */
+    fun startGitHubLogin() {
+        if (_isGitHubLoggingIn.value) return
+        _isGitHubLoggingIn.value = true
+        viewModelScope.launch {
+            val result = gitHubAuth.startDeviceFlow()
+            _isGitHubLoggedIn.value = gitHubAuth.isLoggedIn
+            _isGitHubLoggingIn.value = false
+            if (result is GitHubAuthManager.DeviceFlowResult.Error) {
+                _aiErrorMsg.value = "GitHub login failed: ${result.message}"
+            }
+        }
+    }
+
+    fun gitHubLogout() {
+        gitHubAuth.logout()
+        _isGitHubLoggedIn.value = false
+    }
+
+    /**
+     * Submits a feedback issue to the Prioritize GitHub repository.
+     * Automatically appends device and model context to the issue body.
+     */
+    fun submitFeedback(title: String, body: String, labels: List<String>) {
+        val token = gitHubAuth.accessToken ?: run {
+            _feedbackSubmitState.value = FeedbackSubmitState.Error("Not connected to GitHub.")
+            return
+        }
+        _feedbackSubmitState.value = FeedbackSubmitState.Submitting
+        viewModelScope.launch {
+            val enrichedBody = buildString {
+                appendLine(body)
+                appendLine()
+                appendLine("---")
+                appendLine("**Submitted from:** Prioritize Android App")
+                appendLine("**Active model:** ${_activeModelSpec.value.name}")
+                appendLine("**Backend:** $activeBackend")
+                appendLine("**Submitted by:** @${gitHubAuth.username}")
+            }
+            val result = gitHubIssueService.createIssue(
+                token = token,
+                title = title,
+                body = enrichedBody,
+                labels = labels
+            )
+            _feedbackSubmitState.value = when (result) {
+                is GitHubIssueService.IssueResult.Success ->
+                    FeedbackSubmitState.Success(result.url, result.number)
+                is GitHubIssueService.IssueResult.Error ->
+                    FeedbackSubmitState.Error(result.message)
+            }
+        }
+    }
+
+    fun resetFeedbackState() {
+        _feedbackSubmitState.value = FeedbackSubmitState.Idle
+    }
+
+    sealed class FeedbackSubmitState {
+        object Idle : FeedbackSubmitState()
+        object Submitting : FeedbackSubmitState()
+        data class Success(val url: String, val number: Int) : FeedbackSubmitState()
+        data class Error(val message: String) : FeedbackSubmitState()
     }
 
     val parser: TaskParser = Gemma4Parser(application)

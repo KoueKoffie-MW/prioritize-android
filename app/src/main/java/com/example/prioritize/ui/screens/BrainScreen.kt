@@ -72,7 +72,13 @@ fun BrainScreen(viewModel: TaskViewModel) {
     var modelToConfirmActive by remember { mutableStateOf<EdgeModelSpec?>(null) }
     var showDiagDialog by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
+    var showFeedbackSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // GitHub auth state
+    val isGitHubLoggedIn by viewModel.isGitHubLoggedIn.collectAsState()
+    val isGitHubLoggingIn by viewModel.isGitHubLoggingIn.collectAsState()
+    val feedbackSubmitState by viewModel.feedbackSubmitState.collectAsState()
 
     val aiErrorMsg by viewModel.aiErrorMsg.collectAsState()
     LaunchedEffect(aiErrorMsg) {
@@ -344,6 +350,63 @@ fun BrainScreen(viewModel: TaskViewModel) {
                 }
 
                 HorizontalDivider(color = Color(0xFF28283C), modifier = Modifier.padding(bottom = 16.dp))
+
+                // ── GitHub Feedback ────────────────────────────────────────
+                Text("Feedback & Feature Requests", color = Color.LightGray, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E2C)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        if (isGitHubLoggedIn) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text("🟢 Connected as", color = Color(0xFF03DAC6), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text("@${viewModel.gitHubUsername}", color = Color.White, fontSize = 13.sp)
+                                }
+                                TextButton(onClick = { viewModel.gitHubLogout() }) {
+                                    Text("Disconnect", color = Color(0xFFCF6679), fontSize = 12.sp)
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Button(
+                                onClick = { showFeedbackSheet = true; showSettingsSheet = false },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF28283C), contentColor = Color.White)
+                            ) {
+                                Text("💡 Submit Feedback or Feature Request")
+                            }
+                        } else {
+                            Text(
+                                "Connect your GitHub account to submit feature requests and bug reports directly to the Prioritize repository.",
+                                color = Color.Gray, fontSize = 11.sp
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Button(
+                                onClick = { viewModel.startGitHubLogin() },
+                                enabled = !isGitHubLoggingIn,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238636), contentColor = Color.White)
+                            ) {
+                                if (isGitHubLoggingIn) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Waiting for authorization...")
+                                } else {
+                                    Text("🔗 Connect GitHub Account")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = Color(0xFF28283C), modifier = Modifier.padding(bottom = 16.dp))
                 Text("Available Edge LLM Models", color = Color.White, fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 8.dp))
 
@@ -500,6 +563,13 @@ fun BrainScreen(viewModel: TaskViewModel) {
     }
 
     // DIALOGS
+    if (showFeedbackSheet) {
+        FeedbackDialog(
+            viewModel = viewModel,
+            onDismiss = { showFeedbackSheet = false }
+        )
+    }
+
     if (showDiagDialog) {
         AlertDialog(onDismissRequest = { showDiagDialog = false },
             title = { Text("Acceleration Diagnostics", color = Color.White) },
@@ -653,6 +723,150 @@ fun ChatMessageBubble(
                     modifier = Modifier.padding(top = 4.dp)
                 ) {
                     Text(text = "➕ Save date: \"${message.actionSpecialDate.name}\"", fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
+
+// ── Feedback Bottom Sheet ────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FeedbackDialog(
+    viewModel: TaskViewModel,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val feedbackSubmitState by viewModel.feedbackSubmitState.collectAsState()
+
+    var title by remember { mutableStateOf("") }
+    var body by remember { mutableStateOf("") }
+    var selectedLabel by remember { mutableStateOf("enhancement") }
+
+    val labels = listOf(
+        "enhancement" to "💡 Feature Request",
+        "bug" to "🐛 Bug Report",
+        "question" to "❓ Question",
+        "improvement" to "⚡ Improvement"
+    )
+
+    // Auto-dismiss and show link on success
+    LaunchedEffect(feedbackSubmitState) {
+        if (feedbackSubmitState is TaskViewModel.FeedbackSubmitState.Success) {
+            val state = feedbackSubmitState as TaskViewModel.FeedbackSubmitState.Success
+            Toast.makeText(context, "Issue #${state.number} submitted! ✅", Toast.LENGTH_LONG).show()
+            viewModel.resetFeedbackState()
+            onDismiss()
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = { viewModel.resetFeedbackState(); onDismiss() },
+        containerColor = Color(0xFF151522),
+        dragHandle = { BottomSheetDefaults.DragHandle(color = Color(0xFF444466)) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            Text(
+                "Submit Feedback",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            Text(
+                "Submits a GitHub issue to KoueKoffie-MW/prioritize-android as @${viewModel.gitHubUsername}",
+                color = Color.Gray,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            // Label selector
+            Text("Type", color = Color.LightGray, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                labels.forEach { (key, display) ->
+                    val isSelected = selectedLabel == key
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { selectedLabel = key },
+                        label = { Text(display, fontSize = 11.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFF3700B3),
+                            selectedLabelColor = Color.White,
+                            containerColor = Color(0xFF1E1E2C),
+                            labelColor = Color.LightGray
+                        )
+                    )
+                }
+            }
+
+            // Title
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text("Title") },
+                placeholder = { Text("Short summary of the request", color = Color.DarkGray) },
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                    focusedBorderColor = Color(0xFFBB86FC), unfocusedBorderColor = Color(0xFF444466),
+                    focusedLabelColor = Color(0xFFBB86FC), unfocusedLabelColor = Color.Gray
+                ),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+            )
+
+            // Body
+            OutlinedTextField(
+                value = body,
+                onValueChange = { body = it },
+                label = { Text("Description") },
+                placeholder = { Text("Describe what you'd like or what went wrong...", color = Color.DarkGray) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                    focusedBorderColor = Color(0xFFBB86FC), unfocusedBorderColor = Color(0xFF444466),
+                    focusedLabelColor = Color(0xFFBB86FC), unfocusedLabelColor = Color.Gray
+                ),
+                modifier = Modifier.fillMaxWidth().height(140.dp).padding(bottom = 16.dp)
+            )
+
+            // Error message
+            if (feedbackSubmitState is TaskViewModel.FeedbackSubmitState.Error) {
+                Text(
+                    (feedbackSubmitState as TaskViewModel.FeedbackSubmitState.Error).message,
+                    color = Color(0xFFCF6679),
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+
+            // Submit button
+            Button(
+                onClick = {
+                    if (title.isNotBlank() && body.isNotBlank()) {
+                        viewModel.submitFeedback(title.trim(), body.trim(), listOf(selectedLabel))
+                    } else {
+                        Toast.makeText(context, "Please fill in both title and description.", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                enabled = feedbackSubmitState !is TaskViewModel.FeedbackSubmitState.Submitting,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBB86FC), contentColor = Color.Black)
+            ) {
+                if (feedbackSubmitState is TaskViewModel.FeedbackSubmitState.Submitting) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.Black, strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Submitting...")
+                } else {
+                    Text("Submit to GitHub", fontWeight = FontWeight.Bold)
                 }
             }
         }
