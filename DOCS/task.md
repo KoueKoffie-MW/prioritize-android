@@ -1,0 +1,10 @@
+- [x] Generate App Icon (`app_icon.png`)
+- [x] Generate Feature Graphic (`feature_graphic.png`)
+- [x] Seed mock data in the Android app source code
+- [x] Build the debug APK (`./gradlew assembleDebug`)
+- [x] Start the Android emulator (`medium_phone`)
+- [x] Install the APK and launch the app
+- [x] Capture screenshots of the 5 core tabs
+- [x] Revert the mock data seeding changes
+- [x] Stop the Android emulator
+- [x] Create walkthrough.md summarizing the results

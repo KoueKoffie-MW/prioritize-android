@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prioritize — Private 3D Cognitive Assistant</title>
+    <meta name="description" content="Prioritize is an offline-first, local 3D cognitive assistant and second brain that protects your privacy while keeping you focused. No data leaves your device.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Plus+Jakarta+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header class="navbar">
+        <div class="logo-container">
+            <img src="images/app_icon.png" alt="Prioritize Logo" class="nav-logo" id="nav-logo-id">
+            <span class="logo-text">Prioritize</span>
+        </div>
+        <nav class="nav-links">
+            <a href="#features">Features</a>
+            <a href="#privacy">Privacy</a>
+            <a href="#interactive">Interactive Demo</a>
+            <a href="#faq">FAQ</a>
+        </nav>
+    </header>
+
+    <main>
+        <!-- Hero Section -->
+        <section class="hero-section">
+            <div class="hero-content">
+                <span class="badge">100% On-Device AI</span>
+                <h1>Your Private <span class="gradient-text">3D Second Brain</span></h1>
+                <p class="hero-subtext">
+                    Prioritize uses a local edge model (Gemma 4 E4B) to parse, schedule, and structure your life. No cloud, no trackers, no subscriptions.
+                </p>
+                <div class="hero-buttons">
+                    <a href="#features" class="btn btn-primary" id="btn-explore-id">Explore Features</a>
+                    <a href="#interactive" class="btn btn-secondary" id="btn-demo-id">Try Interactive Demo</a>
+                </div>
+            </div>
+            <div class="hero-visual">
+                <div class="icon-glow-card">
+                    <img src="images/app_icon.png" alt="Prioritize App Icon" class="hero-icon" id="hero-icon-id">
+                </div>
+            </div>
+        </section>
+
+        <!-- Privacy Banner -->
+        <section class="privacy-banner" id="privacy">
+            <div class="banner-content">
+                <h2>Zero Data Leakage. Zero Latency.</h2>
+                <p>
+                    Because Prioritize runs **Gemma 4 E4B** directly on your device's NPU/GPU, **none of your inputs, task descriptions, or brainstorming logs are sent to the cloud**. It works completely offline, in flight mode, or deep in the mountains.
+                </p>
+            </div>
+        </section>
+
+        <!-- Features Showcase -->
+        <section class="features-section" id="features">
+            <h2 class="section-title">Cognitive Support, Engineered</h2>
+            <div class="feature-grid">
+                <!-- Feature 1 -->
+                <div class="feature-card">
+                    <div class="feature-info">
+                        <span class="feat-badge text-mint">3D Matrix</span>
+                        <h3>3D Prioritization Cube</h3>
+                        <p>
+                            Traditional list views create anxiety. Prioritize maps tasks in a 3D space: Importance, Urgency, and Duration (Z-axis). 
+                        </p>
+                        <p class="audience-tip">
+                            <strong>For ADHD:</strong> Lower-duration tasks get an automatic dopamine "quick win" boost to beat startup inertia.<br>
+                            <strong>For Everyone:</strong> Urgency calculations scale dynamically based on `SlackTime` (Time Remaining - Duration), bringing complex task alerts forward.
+                        </p>
+                    </div>
+                    <div class="feature-image">
+                        <img src="images/showcase_3d_cube.png" alt="3D Prioritization Cube UI" class="showcase-img" id="showcase-3d-id">
+                    </div>
+                </div>
+
+                <!-- Feature 2 -->
+                <div class="feature-card reversed">
+                    <div class="feature-info">
+                        <span class="feat-badge text-purple">Time Horizons</span>
+                        <h3>Logarithmic Horizon</h3>
+                        <p>
+                            Cluttered calendars cause overwhelm. The Logarithmic Timeline organizes your outlook into Week, Month, Quarter, and Year panels.
+                        </p>
+                        <p class="audience-tip">
+                            <strong>For ADHD:</strong> Cadence filtering automatically hides short-term repeating tasks (like daily chores) from larger scales, keeping your future outlook clean.<br>
+                            <strong>For Everyone:</strong> Focus on what matters now without losing sight of long-term milestones.
+                        </p>
+                    </div>
+                    <div class="feature-image">
+                        <img src="images/showcase_timeline.png" alt="Logarithmic Horizon UI" class="showcase-img" id="showcase-timeline-id">
+                    </div>
+                </div>
+
+                <!-- Feature 3 -->
+                <div class="feature-card">
+                    <div class="feature-info">
+                        <span class="feat-badge text-blue">Offline Agent</span>
+                        <h3>Brain Chat & RAG Search</h3>
+                        <p>
+                            Brainstorm tasks freely. Gemma 4 automatically detects planning steps and suggests "Action Chips" to save tasks to your Scratch Pad.
+                        </p>
+                        <p class="audience-tip">
+                            <strong>Web RAG Loop:</strong> If the model needs local information (like schedule changes), it queries the web on-device, scrapes DuckDuckGo, and answers factually without data mining.
+                        </p>
+                    </div>
+                    <div class="feature-image">
+                        <img src="images/showcase_chat.png" alt="Brain Chat UI" class="showcase-img" id="showcase-chat-id">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Interactive Score Calculator -->
+        <section class="interactive-section" id="interactive">
+            <h2 class="section-title">Dynamic Priority Math</h2>
+            <p class="section-subtitle">See how the 3D Priority algorithm works in real time.</p>
+            
+            <div class="interactive-container">
+                <div class="controls-panel">
+                    <div class="control-group">
+                        <label for="importance-slider">Importance: <span id="val-importance">5</span>/10</label>
+                        <input type="range" id="importance-slider" min="1" max="10" value="5">
+                    </div>
+                    <div class="control-group">
+                        <label for="urgency-slider">Urgency: <span id="val-urgency">5</span>/10</label>
+                        <input type="range" id="urgency-slider" min="1" max="10" value="5">
+                    </div>
+                    <div class="control-group">
+                        <label for="duration-select">Estimated Duration:</label>
+                        <select id="duration-select">
+                            <option value="5">5 min (Quick Win)</option>
+                            <option value="15" selected>15 min</option>
+                            <option value="60">1 hour</option>
+                            <option value="240">4 hours</option>
+                            <option value="480">8 hours (1 day)</option>
+                            <option value="2400">40 hours (1 week)</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="deadline-select">Deadline Proximity:</label>
+                        <select id="deadline-select">
+                            <option value="none">No Deadline</option>
+                            <option value="72">3 Days remaining</option>
+                            <option value="24">24 Hours remaining</option>
+                            <option value="6">6 Hours remaining</option>
+                            <option value="0">Due Now / Overdue</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="score-display-panel">
+                    <div class="score-dial">
+                        <span class="score-label">Priority Score</span>
+                        <span class="score-value" id="priority-score-val">25.0</span>
+                    </div>
+                    <div class="score-breakdown">
+                        <div class="breakdown-item">
+                            <span>Base Score (Imp * 3 + Urg * 2):</span>
+                            <span id="breakdown-base">25.0</span>
+                        </div>
+                        <div class="breakdown-item">
+                            <span>Deadline Urgency Spike:</span>
+                            <span id="breakdown-deadline">0.0</span>
+                        </div>
+                        <div class="breakdown-item">
+                            <span>ADHD Dopamine Bonus:</span>
+                            <span id="breakdown-dopamine">10.0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- FAQ Section -->
+        <section class="faq-section" id="faq">
+            <h2 class="section-title">Frequently Asked Questions</h2>
+            <div class="faq-accordion">
+                <div class="faq-item">
+                    <h4>Why is this useful for non-ADHD users?</h4>
+                    <p>
+                        Non-ADHD users benefit from a more scientific, stress-free prioritization model. By factoring task duration into urgency schedules, the app prevents project crunches. Its logarithmic time panels prevent daily checklist fatigue, and its 100% offline nature ensures absolute data security.
+                    </p>
+                </div>
+                <div class="faq-item">
+                    <h4>What is an edge model?</h4>
+                    <p>
+                        An edge model is an AI model compressed and optimized to run directly on the consumer hardware in your pocket (using your phone's graphics chip or neural processor). It requires no internet, incurs zero API token costs, and ensures complete data privacy.
+                    </p>
+                </div>
+                <div class="faq-item">
+                    <h4>How does backup work?</h4>
+                    <p>
+                        You can export your database as a local JSON file at any time. When reinstalling the app or upgrading your phone, simply import the file to restore all your profiles, tasks, repeating schedules, and notes instantly.
+                    </p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2026 Prioritize. Local Edge AI Project.</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
