@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.prioritize.data.Task
 import com.example.prioritize.ui.components.ConfirmTaskDialog
+import com.example.prioritize.ui.components.SwipeableTaskCard
 import com.example.prioritize.ui.components.TaskCard
 import com.example.prioritize.ui.viewmodel.TaskViewModel
 
@@ -142,7 +143,7 @@ fun FocusListScreen(
 
                     items(top3Tasks, key = { it.id }) { task ->
                         val subTasks = subTasksMap[task.id] ?: emptyList()
-                        TaskCard(
+                        SwipeableTaskCard(
                             task = task,
                             subTasks = subTasks,
                             onCompleteChange = { isChecked -> viewModel.toggleTaskCompletion(task, isChecked) },
@@ -186,7 +187,7 @@ fun FocusListScreen(
 
                     items(remainingTasks, key = { it.id }) { task ->
                         val subTasks = subTasksMap[task.id] ?: emptyList()
-                        TaskCard(
+                        SwipeableTaskCard(
                             task = task,
                             subTasks = subTasks,
                             onCompleteChange = { isChecked -> viewModel.toggleTaskCompletion(task, isChecked) },

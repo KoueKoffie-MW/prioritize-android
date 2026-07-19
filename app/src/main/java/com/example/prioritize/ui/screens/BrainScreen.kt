@@ -173,15 +173,15 @@ fun BrainScreen(viewModel: TaskViewModel) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Your Second Brain",
+                    text = "Brain",
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
+                    fontSize = 22.sp,
                     maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "LLM: ${activeModelSpec.name}",
+                    text = "${activeModelSpec.name}  •  ${viewModel.activeBackend}",
                     color = Color(0xFF03DAC6),
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -240,12 +240,27 @@ fun BrainScreen(viewModel: TaskViewModel) {
                     }
                 }
             } else if (chatMessages.isEmpty()) {
-                Column(modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Brainstorming Space", color = Color.DarkGray, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("Chat with local AI to plan tasks, structure ideas, or ask the web to check schedules.",
-                        color = Color.DarkGray, fontSize = 12.sp, textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(start = 32.dp, end = 32.dp, top = 4.dp))
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("🧠", fontSize = 48.sp)
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Brainstorming Space",
+                        color = Color(0xFF9999BB),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Ask the AI to plan tasks, structure ideas,\nor reason through your schedule.",
+                        color = Color(0xFF555577),
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 32.dp)
+                    )
                 }
             } else {
                 LazyColumn(state = chatListState, modifier = Modifier.fillMaxSize(),

@@ -2,6 +2,7 @@ package com.example.prioritize.ui.components
 
 import android.text.format.DateFormat
 import androidx.compose.animation.*
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -336,3 +337,97 @@ private fun Modifier.scale(scale: Float): Modifier = this.then(
         }
     }
 )
+
+// ── SwipeableTaskCard ────────────────────────────────────────────
+// Wraps TaskCard with swipe-to-complete (right) and swipe-to-delete (left).
+// For use only with active (non-completed) tasks in FocusListScreen.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SwipeableTaskCard(
+    task: Task,
+    subTasks: List<SubTask>,
+    onCompleteChange: (Boolean) -> Unit,
+    onSubTaskCompleteChange: (SubTask, Boolean) -> Unit,
+    onDeleteClick: () -> Unit,
+    onEditClick: () -> Unit,
+    onBreakdownClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            when (value) {
+                SwipeToDismissBoxValue.StartToEnd -> {
+                    // Swipe right → mark as complete
+                    // Return false: let the list recompose naturally (task moves to COMPLETED)
+                    onCompleteChange(true)
+                    false
+                }
+                SwipeToDismissBoxValue.EndToStart -> {
+                    // Swipe left → delete
+                    onDeleteClick()
+                    true
+                }
+                SwipeToDismissBoxValue.Settled -> false
+            }
+        },
+        positionalThreshold = { totalDistance -> totalDistance * 0.38f }
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = true,
+        enableDismissFromEndToStart = true,
+        backgroundContent = {
+            val direction = dismissState.dismissDirection
+            val bgColor by animateColorAsState(
+                targetValue = when (direction) {
+                    SwipeToDismissBoxValue.StartToEnd -> Color(0xFF22D3A0).copy(alpha = 0.88f)
+                    SwipeToDismissBoxValue.EndToStart -> Color(0xFFCF6679).copy(alpha = 0.88f)
+                    else                              -> Color.Transparent
+                },
+                label = "swipeBg"
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(vertical = 5.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(bgColor)
+                    .padding(horizontal = 24.dp),
+                contentAlignment = when (direction) {
+                    SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
+                    else                              -> Alignment.CenterEnd
+                }
+            ) {
+                when (direction) {
+                    SwipeToDismissBoxValue.StartToEnd -> Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("✓", color = Color.Black, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+                        Text("Complete", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                    SwipeToDismissBoxValue.EndToStart -> Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("Delete", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("🗑", fontSize = 18.sp)
+                    }
+                    else -> {}
+                }
+            }
+        },
+        modifier = modifier
+    ) {
+        TaskCard(
+            task = task,
+            subTasks = subTasks,
+            onCompleteChange = onCompleteChange,
+            onSubTaskCompleteChange = onSubTaskCompleteChange,
+            onDeleteClick = onDeleteClick,
+            onEditClick = onEditClick,
+            onBreakdownClick = onBreakdownClick
+        )
+    }
+}
