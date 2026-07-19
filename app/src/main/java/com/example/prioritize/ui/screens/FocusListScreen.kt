@@ -19,6 +19,15 @@ import com.example.prioritize.ui.components.ConfirmTaskDialog
 import com.example.prioritize.ui.components.TaskCard
 import com.example.prioritize.ui.viewmodel.TaskViewModel
 
+// Hardcoded dark palette — consistent with all other screens in the app
+private val BG = Color(0xFF0D0D1A)
+private val SURFACE = Color(0xFF1A1A2E)
+private val ACCENT_TEAL = Color(0xFF03DAC6)
+private val ACCENT_RED = Color(0xFFFF6B6B)
+private val TEXT_PRIMARY = Color.White
+private val TEXT_SECONDARY = Color(0xFF9999BB)
+private val DIVIDER = Color(0xFF222238)
+
 @Composable
 fun FocusListScreen(
     viewModel: TaskViewModel,
@@ -31,7 +40,6 @@ fun FocusListScreen(
 
     var activeTaskForEdit by remember { mutableStateOf<Task?>(null) }
 
-    // Observe isModelAvailable as a StateFlow so the UI updates when model is downloaded/deleted
     val isModelAvailable by viewModel.isModelAvailable.collectAsState()
 
     // Split tasks: Top 3 vs the rest
@@ -41,35 +49,61 @@ fun FocusListScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp)
+            .background(BG)
+            .padding(horizontal = 16.dp)
     ) {
+        // ── Compact header ─────────────────────────────────────────────────
+        Spacer(Modifier.height(16.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Bottom
+        ) {
+            Text(
+                text = "Focus",
+                color = TEXT_PRIMARY,
+                fontWeight = FontWeight.Bold,
+                fontSize = 28.sp
+            )
+            Text(
+                text = "${activeTasks.size} task${if (activeTasks.size == 1) "" else "s"}",
+                color = TEXT_SECONDARY,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
         Text(
-            text = "Focus Dashboard",
-            color = MaterialTheme.colorScheme.onBackground,
-            fontWeight = FontWeight.Bold,
-            fontSize = 22.sp,
-            modifier = Modifier.padding(bottom = 4.dp)
+            text = "Ranked by priority score",
+            color = TEXT_SECONDARY,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(top = 2.dp, bottom = 16.dp)
         )
-        Text(
-            text = "Your tasks sorted dynamically by dynamic priority scoring.",
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-            fontSize = 13.sp,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+        HorizontalDivider(color = DIVIDER, modifier = Modifier.padding(bottom = 8.dp))
 
         if (activeTasks.isEmpty()) {
+            // ── Empty state ───────────────────────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "No active tasks. Dump thoughts in the Scratch Pad!",
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                    fontSize = 14.sp
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("✨", fontSize = 48.sp)
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = "All clear!",
+                        color = TEXT_PRIMARY,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "Dump your next thought in the Scratch Pad.",
+                        color = TEXT_SECONDARY,
+                        fontSize = 13.sp
+                    )
+                }
             }
         } else {
             LazyColumn(
@@ -77,17 +111,28 @@ fun FocusListScreen(
                     .fillMaxWidth()
                     .weight(1f)
             ) {
-                // Render Top 3 Priorities
+                // ── Top 3 Priorities ───────────────────────────────────────
                 if (top3Tasks.isNotEmpty()) {
                     item {
-                        Text(
-                            text = "TOP PRIORITIES",
-                            color = MaterialTheme.colorScheme.error,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            letterSpacing = 1.5.sp,
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(vertical = 8.dp)
-                        )
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(ACCENT_RED.copy(alpha = 0.15f))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            ) {
+                                Text(
+                                    text = "TOP PRIORITIES",
+                                    color = ACCENT_RED,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp,
+                                    letterSpacing = 1.5.sp
+                                )
+                            }
+                        }
                     }
 
                     items(top3Tasks, key = { it.id }) { task ->
@@ -104,17 +149,34 @@ fun FocusListScreen(
                     }
                 }
 
-                // Render remaining tasks
+                // ── Backlog ────────────────────────────────────────────────
                 if (remainingTasks.isNotEmpty()) {
                     item {
-                        Text(
-                            text = "BACKLOG",
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            letterSpacing = 1.5.sp,
-                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-                        )
+                        HorizontalDivider(color = DIVIDER, modifier = Modifier.padding(vertical = 12.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(ACCENT_TEAL.copy(alpha = 0.1f))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            ) {
+                                Text(
+                                    text = "BACKLOG",
+                                    color = ACCENT_TEAL,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp,
+                                    letterSpacing = 1.5.sp
+                                )
+                            }
+                            Text(
+                                text = "  ${remainingTasks.size} remaining",
+                                color = TEXT_SECONDARY,
+                                fontSize = 12.sp
+                            )
+                        }
                     }
 
                     items(remainingTasks, key = { it.id }) { task ->
@@ -130,10 +192,12 @@ fun FocusListScreen(
                         )
                     }
                 }
+
+                item { Spacer(Modifier.height(16.dp)) }
             }
         }
 
-        // Edit Task Dialog (using ConfirmTaskDialog reuse pattern)
+        // Edit Task Dialog
         activeTaskForEdit?.let { task ->
             ConfirmTaskDialog(
                 suggestion = com.example.prioritize.ai.ParsedTaskSuggestion(
@@ -141,11 +205,10 @@ fun FocusListScreen(
                     description = task.description,
                     importance = task.importance,
                     urgency = task.urgency,
-                    estimatedMinutes = task.estimatedMinutes, // Preserve original, don't default to 15
+                    estimatedMinutes = task.estimatedMinutes,
                     deadline = task.deadline
                 ),
                 onConfirm = { updatedTask ->
-                    // Preserve original database ID and creation dates
                     val finalTask = updatedTask.copy(
                         id = task.id,
                         createdAt = task.createdAt
@@ -154,9 +217,6 @@ fun FocusListScreen(
                     activeTaskForEdit = null
                 },
                 onConfirmRepeating = { updatedRepTask ->
-                    // If they edited a normal task and converted it to repeating,
-                    // save it as a new repeating task and mark the original as done or delete it.
-                    // For simplicity, we just save the repeating task here.
                     viewModel.saveRepeatingTask(updatedRepTask)
                     activeTaskForEdit = null
                 },

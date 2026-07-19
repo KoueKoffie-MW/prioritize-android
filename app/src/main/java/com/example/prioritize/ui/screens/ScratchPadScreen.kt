@@ -133,11 +133,22 @@ fun ScratchPadScreen(
                     .weight(1f),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "Your inbox is empty. Type and dump something!",
-                    color = Color.Gray,
-                    fontSize = 14.sp
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("📥", fontSize = 40.sp)
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = "Inbox is empty",
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 16.sp
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "Type a thought above and tap →",
+                        color = Color.Gray,
+                        fontSize = 13.sp
+                    )
+                }
             }
         } else {
             LazyColumn(
@@ -147,17 +158,18 @@ fun ScratchPadScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(scratchPadTasks) { task ->
+                    val isAI = isModelAvailable
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF1E1E2C))
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF1A1A2E))
                             .combinedClickable(
                                 onClick = {
                                     if (isModelAvailable) {
                                         viewModel.processScratchPadItem(task)
                                     } else {
-                                        Toast.makeText(context, "Local Gemma 4 model file not found in app files. Adding manually.", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "AI unavailable — adding manually.", Toast.LENGTH_SHORT).show()
                                         viewModel.saveTask(
                                             task.copy(
                                                 isScratchPadItem = false,
@@ -168,7 +180,7 @@ fun ScratchPadScreen(
                                     }
                                 },
                                 onLongClick = {
-                                    Toast.makeText(context, "Quick Added manually: \"${task.title}\"", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Quick Added: \"${task.title}\"", Toast.LENGTH_SHORT).show()
                                     viewModel.saveTask(
                                         task.copy(
                                             isScratchPadItem = false,
@@ -178,26 +190,34 @@ fun ScratchPadScreen(
                                     )
                                 }
                             )
-                            .padding(16.dp),
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = task.title,
                             color = Color.White,
-                            fontSize = 15.sp,
-                            maxLines = 1,
+                            fontSize = 14.sp,
+                            maxLines = 2,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f).padding(end = 10.dp)
                         )
-                        Text(
-                            text = if (isModelAvailable) "Process (AI)" else "Quick Add",
-                            color = if (isModelAvailable) Color(0xFF03DAC6) else Color.Gray,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
+                        // Action chip
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (isAI) Color(0xFF1E3A3A) else Color(0xFF2A2A3A)
+                                )
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = if (isAI) "✦ AI Parse" else "+ Add",
+                                color = if (isAI) Color(0xFF03DAC6) else Color(0xFF9999BB),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -19,7 +20,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.layout
 import kotlin.math.roundToInt
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -32,6 +32,19 @@ import java.util.*
 
 // buildBionicString() lives in TextUtils.kt (same package — no import needed)
 
+// ── App-wide dark palette ────────────────────────────────────────────────────
+private val CARD_BG       = Color(0xFF16162A)
+private val CARD_BG_TOP   = Color(0xFF1D1D32)  // Slightly lighter for top-3 emphasis
+private val TEXT_PRIMARY   = Color(0xFFF0F0FF)
+private val TEXT_SECONDARY = Color(0xFF8888AA)
+private val DIVIDER_COLOR  = Color(0xFF252540)
+
+// ── Priority colour mapping ──────────────────────────────────────────────────
+private fun scoreColor(score: Double) = when {
+    score >= 45.0 -> Color(0xFFEF4444)   // Critical — red
+    score >= 30.0 -> Color(0xFFF59E0B)   // Warning  — amber
+    else          -> Color(0xFF22D3A0)   // OK       — emerald
+}
 
 @Composable
 fun TaskCard(
@@ -45,72 +58,72 @@ fun TaskCard(
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
-    // Memoize the priority score so getPriorityScore() is not called on every recomposition
     val priorityScore = remember(task) { task.getPriorityScore() }
-
-    // SOTA ADHD color coding: Red (critical), Orange (medium warning), Theme primary (low/sage)
-    val badgeColor = when {
-        priorityScore >= 45.0 -> Color(0xFFEF4444)
-        priorityScore >= 30.0 -> Color(0xFFF59E0B)
-        else -> MaterialTheme.colorScheme.primary
-    }
+    val scoreCol = scoreColor(priorityScore)
 
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(12.dp)
+            .padding(vertical = 5.dp),
+        colors = CardDefaults.cardColors(containerColor = CARD_BG),
+        shape = RoundedCornerShape(14.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(IntrinsicSize.Min)
         ) {
-            // Visual left stripe for ADHD scanability
+            // ── Priority left stripe ───────────────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .width(5.dp)
-                    .background(badgeColor)
+                    .width(4.dp)
+                    .background(scoreCol)
             )
 
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(12.dp)
+                    .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 8.dp)
             ) {
+                // ── Title row ─────────────────────────────────────────────
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalAlignment = Alignment.Top,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Checkbox(
                         checked = task.isCompleted,
                         onCheckedChange = onCompleteChange,
                         colors = CheckboxDefaults.colors(
-                            checkedColor = MaterialTheme.colorScheme.primary,
-                            checkmarkColor = MaterialTheme.colorScheme.onPrimary
-                        )
+                            checkedColor = scoreCol,
+                            checkmarkColor = Color.Black,
+                            uncheckedColor = TEXT_SECONDARY
+                        ),
+                        modifier = Modifier.padding(top = 2.dp)
                     )
 
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .padding(start = 8.dp)
+                            .padding(start = 6.dp, top = 4.dp)
                     ) {
                         Text(
-                            text = if (task.isCompleted) AnnotatedString(task.title) else buildBionicString(task.title, MaterialTheme.colorScheme.onSurface),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 16.sp,
-                            maxLines = 1,
+                            text = if (task.isCompleted) AnnotatedString(task.title)
+                                   else buildBionicString(task.title, TEXT_PRIMARY),
+                            color = if (task.isCompleted) TEXT_SECONDARY else TEXT_PRIMARY,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
-                            textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+                            textDecoration = if (task.isCompleted) TextDecoration.LineThrough
+                                            else TextDecoration.None
                         )
                         if (task.description.isNotEmpty()) {
                             Text(
                                 text = task.description,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                                fontSize = 13.sp,
+                                color = TEXT_SECONDARY,
+                                fontSize = 12.sp,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(top = 2.dp)
@@ -118,105 +131,125 @@ fun TaskCard(
                         }
                     }
 
-                    // Priority Score Badge
+                    Spacer(Modifier.width(8.dp))
+
+                    // ── Premium score badge ────────────────────────────────
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(badgeColor.copy(alpha = 0.15f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(scoreCol)
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = String.format(Locale.US, "%.1f", priorityScore),
-                            color = badgeColor,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
+                            text = String.format(Locale.US, "%.0f", priorityScore),
+                            color = Color.Black,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 13.sp,
+                            letterSpacing = 0.sp
                         )
                     }
                 }
 
-                // Task meta info (Imp, Urg, Deadline)
+                // ── Meta chips row (Imp / Urg / Deadline) ─────────────────
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 8.dp, start = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                        .padding(top = 8.dp, start = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SuggestionChip(
-                            onClick = {},
-                            label = { Text("Imp: ${task.importance}", fontSize = 11.sp) },
-                            colors = SuggestionChipDefaults.suggestionChipColors(
-                                labelColor = MaterialTheme.colorScheme.primary
-                            )
-                        )
-                        SuggestionChip(
-                            onClick = {},
-                            label = { Text("Urg: ${task.urgency}", fontSize = 11.sp) },
-                            colors = SuggestionChipDefaults.suggestionChipColors(
-                                labelColor = MaterialTheme.colorScheme.secondary
-                            )
-                        )
-                    }
+                    // Importance chip
+                    MetaChip(label = "I:${task.importance}", color = Color(0xFF7C3AED))
+                    Spacer(Modifier.width(6.dp))
+                    // Urgency chip
+                    MetaChip(label = "U:${task.urgency}", color = Color(0xFF0D9488))
 
                     if (task.deadline != null) {
-                        val dateString = DateFormat.format("MMM dd, yyyy HH:mm", Date(task.deadline)).toString()
+                        Spacer(Modifier.width(8.dp))
+                        val dateString = DateFormat.format("MMM dd", Date(task.deadline)).toString()
                         Text(
-                            text = "Due: $dateString",
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
+                            text = "⏰ $dateString",
+                            color = TEXT_SECONDARY,
+                            fontSize = 11.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
+
+                    Spacer(Modifier.weight(1f))
+
+                    // Subtask toggle
+                    if (subTasks.isNotEmpty()) {
+                        val completedCount = subTasks.count { it.isCompleted }
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { expanded = !expanded }
+                                .background(DIVIDER_COLOR)
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "$completedCount/${subTasks.size} steps",
+                                color = TEXT_SECONDARY,
+                                fontSize = 11.sp
+                            )
+                            Icon(
+                                imageVector = if (expanded) Icons.Default.ArrowDropUp
+                                              else Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                tint = TEXT_SECONDARY,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                 }
 
-                // Actions and Subtasks Expand Toggle
+                // ── Action icons ───────────────────────────────────────────
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                        .padding(top = 2.dp),
+                    horizontalArrangement = Arrangement.Start,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row {
-                        IconButton(onClick = onEditClick) {
-                            Icon(Icons.Default.Edit, contentDescription = "Edit Task", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                        }
-                        IconButton(onClick = onDeleteClick) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete Task", tint = MaterialTheme.colorScheme.error)
-                        }
-                        IconButton(onClick = onBreakdownClick) {
-                            Icon(Icons.Default.Build, contentDescription = "Breakdown Task", tint = MaterialTheme.colorScheme.primary)
-                        }
+                    IconButton(onClick = onEditClick, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Edit",
+                            tint = TEXT_SECONDARY,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    IconButton(onClick = onDeleteClick, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = Color(0xFFCF6679),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    IconButton(onClick = onBreakdownClick, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            Icons.Default.Build,
+                            contentDescription = "Break down task",
+                            tint = Color(0xFF7C3AED),
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
 
                     if (subTasks.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier
-                                .clickable { expanded = !expanded }
-                                .padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            val completedCount = subTasks.count { it.isCompleted }
-                            val totalTime = subTasks.sumOf { it.estimatedMinutes }
-                            Text(
-                                text = "Steps: $completedCount/${subTasks.size} (${totalTime}m)",
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                fontSize = 12.sp
-                            )
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = "Expand Steps",
-                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                modifier = Modifier.padding(start = 2.dp)
-                            )
-                        }
+                        val totalTime = subTasks.sumOf { it.estimatedMinutes }
+                        Text(
+                            text = "~${totalTime}m total",
+                            color = TEXT_SECONDARY,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
                     }
                 }
 
-                // Sub-tasks checklist render
+                // ── Sub-tasks checklist ────────────────────────────────────
                 AnimatedVisibility(
                     visible = expanded && subTasks.isNotEmpty(),
                     enter = expandVertically() + fadeIn(),
@@ -225,38 +258,43 @@ fun TaskCard(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp, start = 8.dp, end = 8.dp)
+                            .padding(top = 8.dp)
                     ) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), thickness = 1.dp)
-                        subTasks.forEach { subTask ->
+                        HorizontalDivider(color = DIVIDER_COLOR, thickness = 1.dp)
+                        subTasks.forEachIndexed { index, subTask ->
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
+                                    .padding(vertical = 3.dp)
                             ) {
                                 Checkbox(
                                     checked = subTask.isCompleted,
-                                    onCheckedChange = { isChecked -> onSubTaskCompleteChange(subTask, isChecked) },
+                                    onCheckedChange = { isChecked ->
+                                        onSubTaskCompleteChange(subTask, isChecked)
+                                    },
                                     colors = CheckboxDefaults.colors(
-                                        checkedColor = MaterialTheme.colorScheme.primary,
-                                        checkmarkColor = MaterialTheme.colorScheme.onPrimary
+                                        checkedColor = scoreCol,
+                                        checkmarkColor = Color.Black,
+                                        uncheckedColor = TEXT_SECONDARY
                                     ),
-                                    modifier = Modifier.scale(0.85f)
+                                    modifier = Modifier.scale(0.8f)
                                 )
                                 Text(
-                                    text = subTask.title,
-                                    color = if (subTask.isCompleted) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 14.sp,
-                                    textDecoration = if (subTask.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
+                                    text = "${index + 1}. ${subTask.title}",
+                                    color = if (subTask.isCompleted) TEXT_SECONDARY
+                                            else TEXT_PRIMARY,
+                                    fontSize = 13.sp,
+                                    textDecoration = if (subTask.isCompleted) TextDecoration.LineThrough
+                                                    else TextDecoration.None,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f)
                                 )
                                 Text(
                                     text = "${subTask.estimatedMinutes}m",
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                    fontSize = 12.sp,
+                                    color = TEXT_SECONDARY,
+                                    fontSize = 11.sp,
                                     modifier = Modifier.padding(start = 8.dp)
                                 )
                             }
@@ -265,6 +303,24 @@ fun TaskCard(
                 }
             }
         }
+    }
+}
+
+// ── Compact meta chip ────────────────────────────────────────────────────────
+@Composable
+private fun MetaChip(label: String, color: Color) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(color.copy(alpha = 0.18f))
+            .padding(horizontal = 7.dp, vertical = 3.dp)
+    ) {
+        Text(
+            text = label,
+            color = color,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 

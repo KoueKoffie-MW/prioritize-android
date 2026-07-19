@@ -69,7 +69,7 @@ fun MatrixScreen(
                 QuadrantCard(
                     title = "DO FIRST",
                     subtitle = "Urgent & Important",
-                    count = doFirst.size,
+                    tasks = doFirst,
                     color = Color(0xFFCF6679),
                     modifier = Modifier
                         .weight(1f)
@@ -80,7 +80,7 @@ fun MatrixScreen(
                 QuadrantCard(
                     title = "SCHEDULE",
                     subtitle = "Important / Low Urgency",
-                    count = schedule.size,
+                    tasks = schedule,
                     color = Color(0xFFBB86FC),
                     modifier = Modifier
                         .weight(1f)
@@ -96,7 +96,7 @@ fun MatrixScreen(
                 QuadrantCard(
                     title = "DELEGATE",
                     subtitle = "Urgent / Low Importance",
-                    count = delegate.size,
+                    tasks = delegate,
                     color = Color(0xFF03DAC6),
                     modifier = Modifier
                         .weight(1f)
@@ -107,7 +107,7 @@ fun MatrixScreen(
                 QuadrantCard(
                     title = "ELIMINATE",
                     subtitle = "Low Prio / Trivial",
-                    count = eliminate.size,
+                    tasks = eliminate,
                     color = Color.Gray,
                     modifier = Modifier
                         .weight(1f)
@@ -225,52 +225,113 @@ fun MatrixScreen(
 fun QuadrantCard(
     title: String,
     subtitle: String,
-    count: Int,
+    tasks: List<Task>,
     color: Color,
     modifier: Modifier = Modifier
 ) {
+    val count = tasks.size
     Card(
         modifier = modifier.fillMaxSize(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E2C)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2C)),
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween,
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(12.dp)
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = title,
-                    color = color,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    textAlign = TextAlign.Center
-                )
-                Text(
-                    text = subtitle,
-                    color = Color.Gray,
-                    fontSize = 11.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
+            // ── Header row: title + count badge ───────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        color = color,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                    Text(
+                        text = subtitle,
+                        color = Color(0xFF777799),
+                        fontSize = 9.sp,
+                        modifier = Modifier.padding(top = 1.dp)
+                    )
+                }
+                // Count badge — top right
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(color.copy(alpha = if (count > 0) 0.9f else 0.2f))
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = count.toString(),
+                        color = if (count > 0) Color.Black else color,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 13.sp
+                    )
+                }
             }
 
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(color.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = count.toString(),
-                    color = color,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
-                )
+            Spacer(Modifier.height(10.dp))
+
+            // ── Content: task previews or empty state ──────────────────────
+            if (count == 0) {
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "✓ All clear",
+                        color = color.copy(alpha = 0.35f),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    tasks.take(3).forEach { task ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(color.copy(alpha = 0.08f))
+                                .padding(horizontal = 7.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(5.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(color)
+                            )
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                text = task.title,
+                                color = Color(0xFFCCCCEE),
+                                fontSize = 10.sp,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    if (count > 3) {
+                        Text(
+                            text = "+ ${count - 3} more",
+                            color = color.copy(alpha = 0.5f),
+                            fontSize = 10.sp,
+                            modifier = Modifier.padding(start = 7.dp, top = 2.dp)
+                        )
+                    }
+                }
             }
         }
     }

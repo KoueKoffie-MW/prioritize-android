@@ -148,16 +148,16 @@ fun HorizonScreen(viewModel: TaskViewModel) {
     ) {
         item {
             Text(
-                text = "Logarithmic Time Horizon",
+                text = "Horizon",
                 color = Color.White,
-                fontSize = 22.sp,
+                fontSize = 28.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Future outlook. Repeating items filtered by cadence to reduce clutter.",
-                color = Color.Gray,
+                text = "Future outlook, filtered by deadline.",
+                color = Color(0xFF8888AA),
                 fontSize = 12.sp,
-                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
             )
         }
 
@@ -223,9 +223,9 @@ fun HorizonPanel(
                 ) {
                     if (items.isEmpty()) {
                         Text(
-                            text = "No scheduled items in this period.",
-                            color = Color.DarkGray,
-                            fontSize = 13.sp,
+                            text = "Nothing scheduled here — you're ahead of the curve.",
+                            color = Color(0xFF555577),
+                            fontSize = 12.sp,
                             modifier = Modifier.padding(vertical = 8.dp)
                         )
                     } else {
@@ -283,13 +283,25 @@ fun CompactHorizonTaskRow(task: Task) {
                 )
             }
         }
-        Text(
-            text = String.format("%.0f", score),
-            color = indicatorColor,
-            fontWeight = FontWeight.Bold,
-            fontSize = 13.sp,
-            modifier = Modifier.padding(start = 8.dp)
-        )
+        // Score badge — solid pill matching TaskCard design
+        val badgeColor = when {
+            score >= 45.0 -> Color(0xFFEF4444)
+            score >= 30.0 -> Color(0xFFF59E0B)
+            else          -> Color(0xFF22D3A0)
+        }
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(badgeColor)
+                .padding(horizontal = 8.dp, vertical = 3.dp)
+        ) {
+            Text(
+                text = String.format("%.0f", score),
+                color = Color.Black,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 12.sp
+            )
+        }
     }
 }
 
