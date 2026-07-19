@@ -209,10 +209,10 @@ fun HorizonPanel(
                     fontSize = 16.sp
                 )
                 Text(
-                    text = if (isExpanded) "Collapse" else "Expand",
+                    text = if (isExpanded) "▲" else "▼",
                     color = defaultColor,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
 
@@ -283,6 +283,26 @@ fun CompactHorizonTaskRow(task: Task) {
                 )
             }
         }
+        // Deadline countdown — same urgency rules as TaskCard
+        if (task.deadline != null) {
+            val now = System.currentTimeMillis()
+            val daysLeft = ((task.deadline - now) / (1000L * 60 * 60 * 24)).toInt()
+            val (label, labelColor) = when {
+                daysLeft < 0  -> "⚡ OVERDUE" to Color(0xFFEF4444)
+                daysLeft == 0 -> "⚡ Today!"  to Color(0xFFEF4444)
+                daysLeft == 1 -> "⚡ Tmrw"    to Color(0xFFF59E0B)
+                daysLeft <= 7 -> "⏰ ${daysLeft}d"  to Color(0xFFF59E0B)
+                else          -> "⏰ ${daysLeft}d"  to Color(0xFF777799)
+            }
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = label,
+                color = labelColor,
+                fontWeight = if (daysLeft <= 1) FontWeight.Bold else FontWeight.Normal,
+                fontSize = 11.sp
+            )
+        }
+        Spacer(modifier = Modifier.width(6.dp))
         // Score badge — solid pill matching TaskCard design
         val badgeColor = when {
             score >= 45.0 -> Color(0xFFEF4444)

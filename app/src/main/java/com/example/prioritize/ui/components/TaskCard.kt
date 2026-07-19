@@ -199,6 +199,25 @@ fun TaskCard(
                         )
                     }
 
+                    // Time estimate chip — shown when estimatedMinutes > 0
+                    if (task.estimatedMinutes > 0) {
+                        Spacer(Modifier.width(6.dp))
+                        val timeLabel = when {
+                            task.estimatedMinutes < 60 -> "⏱ ${task.estimatedMinutes}m"
+                            task.estimatedMinutes % 60 == 0 -> "⏱ ${task.estimatedMinutes / 60}h"
+                            else -> "⏱ ${task.estimatedMinutes / 60}h${task.estimatedMinutes % 60}m"
+                        }
+                        Text(
+                            text = timeLabel,
+                            color = Color(0xFF7777AA),
+                            fontSize = 11.sp,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFF1E1E2C))
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                        )
+                    }
+
                     Spacer(Modifier.weight(1f))
 
                     // Subtask toggle
