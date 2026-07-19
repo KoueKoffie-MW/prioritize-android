@@ -54,16 +54,16 @@ fun ScratchPadScreen(
             .padding(16.dp)
     ) {
         Text(
-            text = "Scratch Pad (Inbox)",
+            text = "Scratch Pad",
             color = Color.White,
             fontWeight = FontWeight.Bold,
-            fontSize = 22.sp,
-            modifier = Modifier.padding(bottom = 4.dp)
+            fontSize = 28.sp,
+            modifier = Modifier.padding(bottom = 2.dp)
         )
         Text(
-            text = "Dump tasks quickly. Tap to process with local AI, or long-press to Quick Add manually.",
-            color = Color.Gray,
-            fontSize = 13.sp,
+            text = "Capture thoughts fast. Tap to AI-parse, long-press to quick-add.",
+            color = Color(0xFF8888AA),
+            fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
@@ -123,7 +123,7 @@ fun ScratchPadScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator(color = Color(0xFFBB86FC))
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Gemma 4 is prioritizing...", color = Color.LightGray)
+                    Text("AI is parsing your task...", color = Color(0xFF9999BB), fontSize = 13.sp)
                 }
             }
         } else if (scratchPadTasks.isEmpty()) {
@@ -200,7 +200,7 @@ fun ScratchPadScreen(
                             fontSize = 14.sp,
                             maxLines = 2,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f).padding(end = 10.dp)
+                            modifier = Modifier.weight(1f).padding(end = 8.dp)
                         )
                         // Action chip
                         Box(
@@ -212,10 +212,24 @@ fun ScratchPadScreen(
                                 .padding(horizontal = 10.dp, vertical = 5.dp)
                         ) {
                             Text(
-                                text = if (isAI) "✦ AI Parse" else "+ Add",
+                                text = if (isAI) "✶ AI Parse" else "+ Add",
                                 color = if (isAI) Color(0xFF03DAC6) else Color(0xFF9999BB),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(Modifier.width(6.dp))
+                        // Explicit delete icon — dismiss without processing
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF3A1A1E))
+                                .clickable { viewModel.deleteTask(task) }
+                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = "🗑",
+                                fontSize = 13.sp
                             )
                         }
                     }

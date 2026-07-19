@@ -45,12 +45,19 @@ fun FocusListScreen(
 
     var activeTaskForEdit by remember { mutableStateOf<Task?>(null) }
     var showCompleted by remember { mutableStateOf(false) }
+    var sortByDeadline by remember { mutableStateOf(false) }
 
     val isModelAvailable by viewModel.isModelAvailable.collectAsState()
 
-    // Split tasks: Top 3 vs the rest
-    val top3Tasks = activeTasks.take(3)
-    val remainingTasks = activeTasks.drop(3)
+    // Sort locally: VM already sorts by score; deadline sort is UI-only
+    val sortedTasks = if (sortByDeadline) {
+        activeTasks.sortedWith(
+            compareBy<Task> { it.deadline == null }.thenBy { it.deadline }
+        )
+    } else activeTasks
+
+    val top3Tasks = sortedTasks.take(3)
+    val remainingTasks = sortedTasks.drop(3)
 
     Column(
         modifier = modifier
@@ -80,11 +87,38 @@ fun FocusListScreen(
             )
         }
         Text(
-            text = "Ranked by priority score",
+            text = if (sortByDeadline) "Sorted by deadline" else "Ranked by priority score",
             color = TEXT_SECONDARY,
             fontSize = 12.sp,
             modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
         )
+        // ── Sort toggle pill ──────────────────────────────────────────
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF1A1A2E))
+                .padding(2.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            listOf(false to "🔥 Score", true to "📅 Deadline").forEach { (isDeadline, label) ->
+                val selected = sortByDeadline == isDeadline
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (selected) ACCENT_TEAL else Color.Transparent)
+                        .clickable { sortByDeadline = isDeadline }
+                        .padding(horizontal = 12.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        text = label,
+                        color = if (selected) Color.Black else TEXT_SECONDARY,
+                        fontSize = 11.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
         // Progress bar — shows completion fraction of total lifetime tasks
         val total = activeTasks.size + completedTasks.size
         val fraction = if (total > 0) completedTasks.size.toFloat() / total else 0f
