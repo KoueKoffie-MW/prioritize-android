@@ -234,6 +234,7 @@ fun ScratchPadScreen(
                         }
                     }
                 }
+                item { Spacer(Modifier.height(80.dp)) }
             }
         }
 

@@ -142,13 +142,28 @@ fun TaskCard(
                             .padding(horizontal = 10.dp, vertical = 5.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = String.format(Locale.US, "%.0f", priorityScore),
-                            color = Color.Black,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 13.sp,
-                            letterSpacing = 0.sp
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = String.format(Locale.US, "%.0f", priorityScore),
+                                color = Color.Black,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 13.sp,
+                                letterSpacing = 0.sp
+                            )
+                            val scoreLabel = when {
+                                priorityScore >= 45.0 -> "CRIT"
+                                priorityScore >= 30.0 -> "HIGH"
+                                priorityScore >= 20.0 -> "MED"
+                                else -> "LOW"
+                            }
+                            Text(
+                                text = scoreLabel,
+                                color = Color.Black.copy(alpha = 0.65f),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 7.sp,
+                                letterSpacing = 0.8.sp
+                            )
+                        }
                     }
                 }
 

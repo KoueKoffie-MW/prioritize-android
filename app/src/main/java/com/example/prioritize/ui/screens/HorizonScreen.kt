@@ -176,6 +176,8 @@ fun HorizonScreen(viewModel: TaskViewModel) {
         item {
             HorizonPanel(title = "Year & Beyond", items = yearItems, defaultColor = Color(0xFF1F1B24))
         }
+
+        item { Spacer(Modifier.height(80.dp)) }
     }
 }
 
