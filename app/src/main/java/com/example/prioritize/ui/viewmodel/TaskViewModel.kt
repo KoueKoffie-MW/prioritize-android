@@ -858,6 +858,12 @@ class TaskViewModel(
         }
     }
 
+    fun deleteAllCompletedTasks() {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteAllCompletedTasks()
+        }
+    }
+
     fun saveSubTasks(subTasks: List<SubTask>) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.insertSubTasks(subTasks)

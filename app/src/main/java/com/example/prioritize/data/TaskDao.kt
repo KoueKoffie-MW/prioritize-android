@@ -14,8 +14,11 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE isScratchPadItem = 1 AND isCompleted = 0")
     fun getScratchPadTasksFlow(): Flow<List<Task>>
 
-    @Query("SELECT * FROM tasks WHERE isCompleted = 1")
+    @Query("SELECT * FROM tasks WHERE isCompleted = 1 ORDER BY id DESC")
     fun getCompletedTasksFlow(): Flow<List<Task>>
+
+    @Query("DELETE FROM tasks WHERE isCompleted = 1")
+    suspend fun deleteAllCompletedTasks()
 
     @Query("SELECT * FROM tasks WHERE id = :taskId LIMIT 1")
     suspend fun getTaskById(taskId: Long): Task?

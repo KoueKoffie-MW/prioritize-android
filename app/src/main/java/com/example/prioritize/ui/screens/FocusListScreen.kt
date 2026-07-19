@@ -1,6 +1,7 @@
 package com.example.prioritize.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -24,6 +26,7 @@ private val BG = Color(0xFF0D0D1A)
 private val SURFACE = Color(0xFF1A1A2E)
 private val ACCENT_TEAL = Color(0xFF03DAC6)
 private val ACCENT_RED = Color(0xFFFF6B6B)
+private val ACCENT_GREEN = Color(0xFF22D3A0)
 private val TEXT_PRIMARY = Color.White
 private val TEXT_SECONDARY = Color(0xFF9999BB)
 private val DIVIDER = Color(0xFF222238)
@@ -36,9 +39,11 @@ fun FocusListScreen(
     modifier: Modifier = Modifier
 ) {
     val activeTasks by viewModel.activeTasks.collectAsState()
+    val completedTasks by viewModel.completedTasks.collectAsState()
     val subTasksMap by viewModel.subTasksMap.collectAsState()
 
     var activeTaskForEdit by remember { mutableStateOf<Task?>(null) }
+    var showCompleted by remember { mutableStateOf(false) }
 
     val isModelAvailable by viewModel.isModelAvailable.collectAsState()
 
@@ -193,7 +198,96 @@ fun FocusListScreen(
                     }
                 }
 
-                item { Spacer(Modifier.height(16.dp)) }
+                // ── Completed section ──────────────────────────────────
+                if (completedTasks.isNotEmpty()) {
+                    item {
+                        HorizontalDivider(color = DIVIDER, modifier = Modifier.padding(vertical = 12.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { showCompleted = !showCompleted }
+                                .background(ACCENT_GREEN.copy(alpha = 0.07f))
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(ACCENT_GREEN.copy(alpha = 0.15f))
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = "COMPLETED",
+                                        color = ACCENT_GREEN,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 10.sp,
+                                        letterSpacing = 1.5.sp
+                                    )
+                                }
+                                Text(
+                                    text = "  ${completedTasks.size} task${if (completedTasks.size == 1) "" else "s"}",
+                                    color = TEXT_SECONDARY,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Text(
+                                text = if (showCompleted) "▲ Hide" else "▼ Show",
+                                color = ACCENT_GREEN,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    if (showCompleted) {
+                        item {
+                            // Clear all completed button
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp, bottom = 4.dp),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                TextButton(
+                                    onClick = { viewModel.deleteAllCompletedTasks() },
+                                    colors = ButtonDefaults.textButtonColors(
+                                        contentColor = Color(0xFFCF6679)
+                                    )
+                                ) {
+                                    Text(
+                                        text = "🗑 Clear all completed",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+
+                        items(completedTasks, key = { "done_${it.id}" }) { task ->
+                            val subTasks = subTasksMap[task.id] ?: emptyList()
+                            Box(modifier = Modifier.alpha(0.55f)) {
+                                TaskCard(
+                                    task = task,
+                                    subTasks = subTasks,
+                                    onCompleteChange = { isChecked ->
+                                        viewModel.toggleTaskCompletion(task, isChecked)
+                                    },
+                                    onSubTaskCompleteChange = { subTask, isChecked ->
+                                        viewModel.toggleSubTaskCompletion(subTask, isChecked)
+                                    },
+                                    onDeleteClick = { viewModel.deleteTask(task) },
+                                    onEditClick = { activeTaskForEdit = task },
+                                    onBreakdownClick = { onBreakdownClick(task) }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item { Spacer(Modifier.height(80.dp)) }
             }
         }
 

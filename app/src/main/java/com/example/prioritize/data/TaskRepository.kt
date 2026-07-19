@@ -13,6 +13,7 @@ class TaskRepository(private val taskDao: TaskDao) {
     suspend fun insertTask(task: Task): Long = taskDao.insertTask(task)
     suspend fun updateTask(task: Task) = taskDao.updateTask(task)
     suspend fun deleteTask(task: Task) = taskDao.deleteTask(task)
+    suspend fun deleteAllCompletedTasks() = taskDao.deleteAllCompletedTasks()
 
     // Sub-tasks
     fun getSubTasksFlow(taskId: Long): Flow<List<SubTask>> = taskDao.getSubTasksFlow(taskId)
