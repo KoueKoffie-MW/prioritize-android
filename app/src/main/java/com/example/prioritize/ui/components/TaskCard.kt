@@ -167,13 +167,35 @@ fun TaskCard(
 
                     if (task.deadline != null) {
                         Spacer(Modifier.width(8.dp))
-                        val dateString = DateFormat.format("MMM dd", Date(task.deadline)).toString()
+                        val now = System.currentTimeMillis()
+                        val daysLeft = ((task.deadline - now) / (1000L * 60 * 60 * 24)).toInt()
+                        val (deadlineLabel, deadlineColor) = when {
+                            daysLeft < 0  -> "⚡ OVERDUE"            to Color(0xFFEF4444)
+                            daysLeft == 0 -> "⚡ Today!"             to Color(0xFFEF4444)
+                            daysLeft == 1 -> "⚡ Tmrw"               to Color(0xFFF59E0B)
+                            daysLeft <= 7 -> "⏰ ${daysLeft}d left"  to Color(0xFFF59E0B)
+                            else -> "⏰ ${DateFormat.format("MMM dd", Date(task.deadline))}" to TEXT_SECONDARY
+                        }
                         Text(
-                            text = "⏰ $dateString",
-                            color = TEXT_SECONDARY,
+                            text = deadlineLabel,
+                            color = deadlineColor,
                             fontSize = 11.sp,
+                            fontWeight = if (daysLeft <= 1) FontWeight.Bold else FontWeight.Normal,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    // Repeating task badge
+                    if (task.repeatingTaskId != null) {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "🔁",
+                            fontSize = 11.sp,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFF1E1E2C))
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
                         )
                     }
 
