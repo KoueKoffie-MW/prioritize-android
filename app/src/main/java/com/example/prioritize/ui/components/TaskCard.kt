@@ -45,10 +45,10 @@ private val TEXT_SECONDARY = Color(0xFF8888AA)
 private val DIVIDER_COLOR  = Color(0xFF252540)
 
 // ── Priority colour mapping ──────────────────────────────────────────────────
-private fun scoreColor(score: Double) = when {
-    score >= 45.0 -> Color(0xFFEF4444)   // Critical — red
-    score >= 30.0 -> Color(0xFFF59E0B)   // Warning  — amber
-    else          -> Color(0xFF22D3A0)   // OK       — emerald
+private fun scoreColor(score: Int) = when {
+    score >= 45 -> Color(0xFFEF4444)   // Critical — red
+    score >= 30 -> Color(0xFFF59E0B)   // Warning  — amber
+    else        -> Color(0xFF22D3A0)   // OK       — emerald
 }
 
 @Composable
@@ -64,7 +64,8 @@ fun TaskCard(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val priorityScore = remember(task) { task.getPriorityScore() }
-    val scoreCol = scoreColor(priorityScore)
+    val roundedScore = remember(priorityScore) { kotlin.math.round(priorityScore).toInt() }
+    val scoreCol = scoreColor(roundedScore)
 
     Card(
         modifier = modifier
@@ -148,16 +149,16 @@ fun TaskCard(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = String.format(Locale.US, "%.0f", priorityScore),
+                                text = roundedScore.toString(),
                                 color = Color.Black,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 13.sp,
                                 letterSpacing = 0.sp
                             )
                             val scoreLabel = when {
-                                priorityScore >= 45.0 -> "CRIT"
-                                priorityScore >= 30.0 -> "HIGH"
-                                priorityScore >= 20.0 -> "MED"
+                                roundedScore >= 45 -> "CRIT"
+                                roundedScore >= 30 -> "HIGH"
+                                roundedScore >= 20 -> "MED"
                                 else -> "LOW"
                             }
                             Text(
