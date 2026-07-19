@@ -29,6 +29,7 @@ import com.example.prioritize.data.Task
 import com.example.prioritize.ui.components.ConfirmTaskDialog
 import com.example.prioritize.ui.components.SwipeableTaskCard
 import com.example.prioritize.ui.components.TaskCard
+import com.example.prioritize.ui.components.TaskDetailDialog
 import com.example.prioritize.ui.viewmodel.TaskViewModel
 
 // Hardcoded dark palette — consistent with all other screens in the app
@@ -412,27 +413,23 @@ fun FocusListScreen(
             }
         }
 
-        // Edit Task Dialog
+        // Premium Edit Task Dialog (Task Detail Screen - Option C)
         activeTaskForEdit?.let { task ->
-            ConfirmTaskDialog(
-                suggestion = com.example.prioritize.ai.ParsedTaskSuggestion(
-                    title = task.title,
-                    description = task.description,
-                    importance = task.importance,
-                    urgency = task.urgency,
-                    estimatedMinutes = task.estimatedMinutes,
-                    deadline = task.deadline
-                ),
-                onConfirm = { updatedTask ->
+            val subTasks = subTasksMap[task.id] ?: emptyList()
+            TaskDetailDialog(
+                task = task,
+                initialSubTasks = subTasks,
+                onSave = { updatedTask, updatedSubTasks ->
                     val finalTask = updatedTask.copy(
                         id = task.id,
                         createdAt = task.createdAt
                     )
                     viewModel.saveTask(finalTask)
+                    viewModel.saveSubTasks(updatedSubTasks)
                     activeTaskForEdit = null
                 },
-                onConfirmRepeating = { updatedRepTask ->
-                    viewModel.saveRepeatingTask(updatedRepTask)
+                onDelete = {
+                    viewModel.deleteTask(task)
                     activeTaskForEdit = null
                 },
                 onDismiss = { activeTaskForEdit = null }

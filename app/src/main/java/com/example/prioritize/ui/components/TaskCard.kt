@@ -6,6 +6,8 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -19,7 +21,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalHapticFeedback
 import kotlin.math.roundToInt
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -409,6 +413,8 @@ fun SwipeableTaskCard(
     onBreakdownClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptic = LocalHapticFeedback.current
+
     // Migrate away from deprecated confirmValueChange — use LaunchedEffect on currentValue instead.
     val dismissState = rememberSwipeToDismissBoxState(
         positionalThreshold = { totalDistance -> totalDistance * 0.38f }
@@ -418,12 +424,14 @@ fun SwipeableTaskCard(
     LaunchedEffect(dismissState.currentValue) {
         when (dismissState.currentValue) {
             SwipeToDismissBoxValue.StartToEnd -> {
-                // Swipe right → mark complete, snap card back (task disappears via list recomposition)
+                // Swipe right → haptic + mark complete, snap card back
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 onCompleteChange(true)
                 dismissState.reset()
             }
             SwipeToDismissBoxValue.EndToStart -> {
-                // Swipe left → delete (task removed from DB; recomposition removes it)
+                // Swipe left → haptic + delete
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 onDeleteClick()
             }
             SwipeToDismissBoxValue.Settled -> { /* no-op */ }

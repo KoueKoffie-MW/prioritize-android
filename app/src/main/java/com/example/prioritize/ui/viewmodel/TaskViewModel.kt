@@ -8,10 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.prioritize.ai.Gemma4Parser
-import com.example.prioritize.ai.ParsedSubTaskSuggestion
-import com.example.prioritize.ai.ParsedTaskSuggestion
-import com.example.prioritize.ai.TaskParser
+import com.example.prioritize.ai.*
 import com.example.prioritize.data.SubTask
 import com.example.prioritize.data.Task
 import com.example.prioritize.data.RepeatingTask
@@ -134,7 +131,11 @@ class TaskViewModel(
         data class Error(val message: String) : FeedbackSubmitState()
     }
 
-    val parser: TaskParser = Gemma4Parser(application)
+    val parser = Gemma4Parser(application).apply {
+        actionListener = { action ->
+            handleParserAction(action)
+        }
+    }
 
     val activeBackend: String
         get() = com.example.prioritize.ai.Gemma4Parser.activeBackend
@@ -1236,6 +1237,58 @@ For repeating/recurring tasks, append:
     fun importDatabase(inputStream: InputStream) {
         viewModelScope.launch(Dispatchers.IO) {
             BackupManager.importDatabase(inputStream, repository)
+        }
+    }
+
+    private fun handleParserAction(action: Action) {
+        viewModelScope.launch {
+            when (action) {
+                is CreateTaskAction -> {
+                    val deadline = action.daysUntilDue?.let {
+                        System.currentTimeMillis() + (it.toLong() * 24L * 60L * 60L * 1000L)
+                    }
+                    val task = Task(
+                        title = action.title,
+                        description = action.description,
+                        importance = action.importance,
+                        urgency = action.urgency,
+                        estimatedMinutes = action.estimatedMinutes,
+                        deadline = deadline,
+                        isScratchPadItem = true // Place in ScratchPad/Inbox for review
+                    )
+                    saveTask(task)
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(getApplication(), "✶ Task Suggestion Created: ${action.title}", Toast.LENGTH_LONG).show()
+                    }
+                }
+                is CreateRepeatingTaskAction -> {
+                    val repeatingTask = RepeatingTask(
+                        title = action.title,
+                        description = action.description,
+                        recurrenceType = RecurrenceType.entries.find { it.name == action.recurrenceType } ?: RecurrenceType.WEEKLY,
+                        intervalValue = action.intervalValue,
+                        importance = action.importance,
+                        urgency = action.urgency,
+                        nextDueDate = System.currentTimeMillis() + (24L * 60 * 60 * 1000)
+                    )
+                    saveRepeatingTask(repeatingTask)
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(getApplication(), "🔁 Repeating Task Created: ${action.title}", Toast.LENGTH_LONG).show()
+                    }
+                }
+                is CreateSpecialDateAction -> {
+                    val specialDate = SpecialDate(
+                        name = action.name,
+                        dateMonth = action.month,
+                        dateDay = action.day,
+                        type = SpecialDateType.entries.find { it.name == action.type } ?: SpecialDateType.BIRTHDAY
+                    )
+                    saveSpecialDate(specialDate)
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(getApplication(), "📅 Special Date Created: ${action.name}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
         }
     }
 

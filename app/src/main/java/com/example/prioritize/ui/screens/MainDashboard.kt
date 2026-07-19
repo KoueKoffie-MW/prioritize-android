@@ -48,6 +48,12 @@ fun MainDashboard(
 ) {
     var selectedTab by remember { mutableStateOf(DashboardTab.FOCUS) }
 
+    // Live counts for nav badges
+    val activeTasks by viewModel.activeTasks.collectAsState()
+    val scratchPadTasks by viewModel.scratchPadTasks.collectAsState()
+    val criticalCount = activeTasks.count { it.getPriorityScore() >= 45.0 }
+    val pendingCaptures = scratchPadTasks.size
+
     var showActionSheet by remember { mutableStateOf(false) }
     var showRepeatingDialog by remember { mutableStateOf(false) }
     var showSpecialDateDialog by remember { mutableStateOf(false) }
@@ -107,14 +113,40 @@ fun MainDashboard(
                 NavigationBarItem(
                     selected = selectedTab == DashboardTab.FOCUS,
                     onClick  = { selectedTab = DashboardTab.FOCUS },
-                    icon     = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Focus List") },
+                    icon = {
+                        BadgedBox(
+                            badge = {
+                                if (criticalCount > 0) {
+                                    Badge(
+                                        containerColor = Color(0xFFEF4444),
+                                        contentColor = Color.White
+                                    ) { Text(criticalCount.toString()) }
+                                }
+                            }
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Focus List")
+                        }
+                    },
                     label    = { Text("Focus") },
                     colors   = navItemColors()
                 )
                 NavigationBarItem(
                     selected = selectedTab == DashboardTab.SCRATCH_PAD,
                     onClick  = { selectedTab = DashboardTab.SCRATCH_PAD },
-                    icon     = { Icon(Icons.Default.Create, contentDescription = "Scratch Pad") },
+                    icon = {
+                        BadgedBox(
+                            badge = {
+                                if (pendingCaptures > 0) {
+                                    Badge(
+                                        containerColor = Color(0xFFBB86FC),
+                                        contentColor = Color.Black
+                                    ) { Text(pendingCaptures.toString()) }
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.Create, contentDescription = "Scratch Pad")
+                        }
+                    },
                     label    = { Text("Scratch Pad") },
                     colors   = navItemColors()
                 )

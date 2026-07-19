@@ -29,6 +29,7 @@ import com.example.prioritize.ui.viewmodel.MessageSender
 import com.example.prioritize.ui.viewmodel.TaskViewModel
 import com.example.prioritize.ui.viewmodel.AVAILABLE_MODELS
 import com.example.prioritize.ui.viewmodel.EdgeModelSpec
+import com.example.prioritize.ui.viewmodel.DeviceHardware
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
@@ -477,6 +478,16 @@ fun BrainScreen(viewModel: TaskViewModel) {
                                             Text(
                                                 text = "\u26a0\ufe0f Low RAM",
                                                 color = Color(0xFFCF6679),
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1
+                                            )
+                                        }
+                                        if (model.isNpuOnly && !DeviceHardware.isTensorG5()) {
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(
+                                                text = "\u26a0\ufe0f NPU Required (Non-G5)",
+                                                color = Color(0xFFFFB74D),
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 maxLines = 1

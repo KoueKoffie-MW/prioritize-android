@@ -4,7 +4,12 @@ import android.content.Context
 import android.util.Log
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.ConversationConfig
+import com.google.ai.edge.litertlm.SamplerConfig
+import com.google.ai.edge.litertlm.tool
 import com.google.ai.edge.litertlm.Backend
+import com.example.prioritize.ui.viewmodel.AVAILABLE_MODELS
+import com.example.prioritize.ui.viewmodel.EdgeModelSpec
 import java.io.File
 import org.json.JSONArray
 import org.json.JSONObject
@@ -14,6 +19,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 class Gemma4Parser(private val context: Context) : TaskParser {
+
+    var actionListener: ((Action) -> Unit)? = null
     
     companion object {
         private const val TAG = "Gemma4Parser"
@@ -257,8 +264,32 @@ class Gemma4Parser(private val context: Context) : TaskParser {
                 try {
                     var fullResponse = ""
                     // Warm KV-cache reuse conversation
-                    val conversation = activeConversation ?: currentEngine.createConversation().also {
-                        activeConversation = it
+                    val conversation = activeConversation ?: run {
+                        val modelSpec = AVAILABLE_MODELS.find { it.filename == activeModelFilename }
+                        val config = if (modelSpec?.supportsTools == true) {
+                            ConversationConfig(
+                                tools = listOf(tool(PrioritizeTools { action ->
+                                    actionListener?.invoke(action)
+                                })),
+                                automaticToolCalling = true,
+                                samplerConfig = if (activeBackend == "NPU") null else SamplerConfig(
+                                    topK = 64,
+                                    topP = 0.95,
+                                    temperature = 1.0
+                                )
+                            )
+                        } else {
+                            ConversationConfig(
+                                samplerConfig = if (activeBackend == "NPU") null else SamplerConfig(
+                                    topK = 64,
+                                    topP = 0.95,
+                                    temperature = 1.0
+                                )
+                            )
+                        }
+                        currentEngine.createConversation(config).also {
+                            activeConversation = it
+                        }
                     }
                     // NOTE: sendMessageAsync crashes on litertlm:0.14.0 due to a binary
                     // incompatibility: it uses Kotlin 2.x bytecode that calls
