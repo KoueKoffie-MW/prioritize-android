@@ -6,14 +6,23 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.prioritize.data.Task
@@ -133,6 +142,69 @@ fun FocusListScreen(
         )
         Spacer(Modifier.height(8.dp))
         HorizontalDivider(color = DIVIDER, modifier = Modifier.padding(bottom = 8.dp))
+
+        // ── Pinned Quick-Add (…………………………………………………………………………………………………………………
+        // Always visible — bypasses Scratch Pad for fast task capture with default I/U = 5/5.
+        var quickAddText by remember { mutableStateOf("") }
+        val focusManager = LocalFocusManager.current
+
+        fun doQuickAdd() {
+            if (quickAddText.isNotBlank()) {
+                viewModel.saveTask(
+                    Task(
+                        title = quickAddText.trim(),
+                        isScratchPadItem = false,
+                        importance = 5,
+                        urgency = 5
+                    )
+                )
+                quickAddText = ""
+                focusManager.clearFocus()
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 10.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(SURFACE)
+                .padding(horizontal = 14.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BasicTextField(
+                value = quickAddText,
+                onValueChange = { quickAddText = it },
+                textStyle = TextStyle(color = TEXT_PRIMARY, fontSize = 14.sp),
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { doQuickAdd() }),
+                decorationBox = { innerTextField ->
+                    if (quickAddText.isEmpty()) {
+                        Text(
+                            text = "+ Quick add a task…",
+                            color = Color(0xFF444466),
+                            fontSize = 14.sp
+                        )
+                    }
+                    innerTextField()
+                }
+            )
+            if (quickAddText.isNotBlank()) {
+                IconButton(
+                    onClick = { doQuickAdd() },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Add task",
+                        tint = ACCENT_TEAL,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
 
         if (activeTasks.isEmpty()) {
             // ── Empty state ───────────────────────────────────────────────
