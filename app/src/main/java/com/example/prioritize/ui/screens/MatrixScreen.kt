@@ -43,16 +43,16 @@ fun MatrixScreen(
             .padding(16.dp)
     ) {
         Text(
-            text = "Eisenhower Matrix",
+            text = "Matrix",
             color = Color.White,
             fontWeight = FontWeight.Bold,
-            fontSize = 22.sp,
-            modifier = Modifier.padding(bottom = 4.dp)
+            fontSize = 28.sp,
+            modifier = Modifier.padding(bottom = 2.dp)
         )
         Text(
-            text = "Tap any quadrant to view or manage its tasks.",
-            color = Color.Gray,
-            fontSize = 13.sp,
+            text = "Eisenhower quadrants · tap to manage",
+            color = Color(0xFF8888AA),
+            fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
@@ -167,39 +167,89 @@ fun MatrixScreen(
                                     .weight(1f),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("No tasks in this quadrant.", color = Color.Gray)
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text("✓", color = quadColor, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        "All clear in this quadrant",
+                                        color = Color(0xFF777799),
+                                        fontSize = 13.sp
+                                    )
+                                }
                             }
                         } else {
                             LazyColumn(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 items(tasksInQuad) { task ->
+                                    val score = task.getPriorityScore()
+                                    val scoreColor = when {
+                                        score >= 45.0 -> Color(0xFFEF4444)
+                                        score >= 30.0 -> Color(0xFFF59E0B)
+                                        else          -> Color(0xFF22D3A0)
+                                    }
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clip(RoundedCornerShape(8.dp))
+                                            .clip(RoundedCornerShape(10.dp))
                                             .background(Color(0xFF1E1E2C))
-                                            .padding(12.dp),
+                                            .padding(end = 10.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
+                                        // Left accent bar
+                                        Box(
+                                            modifier = Modifier
+                                                .width(4.dp)
+                                                .height(52.dp)
+                                                .background(quadColor)
+                                        )
                                         Checkbox(
                                             checked = task.isCompleted,
                                             onCheckedChange = { isChecked ->
                                                 viewModel.toggleTaskCompletion(task, isChecked)
                                             },
-                                            colors = CheckboxDefaults.colors(checkedColor = Color(0xFFBB86FC))
+                                            colors = CheckboxDefaults.colors(checkedColor = quadColor)
                                         )
-                                        Text(
-                                            text = task.title,
-                                            color = Color.White,
-                                            fontSize = 14.sp,
+                                        Column(
+                                            modifier = Modifier.weight(1f).padding(vertical = 8.dp)
+                                        ) {
+                                            Text(
+                                                text = task.title,
+                                                color = Color.White,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 2,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                            )
+                                            if (task.description.isNotBlank()) {
+                                                Text(
+                                                    text = task.description,
+                                                    color = Color(0xFF777799),
+                                                    fontSize = 10.sp,
+                                                    maxLines = 1,
+                                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                        // Score badge
+                                        Box(
                                             modifier = Modifier
-                                                .weight(1f)
-                                                .padding(start = 8.dp)
-                                        )
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(scoreColor)
+                                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                                        ) {
+                                            Text(
+                                                text = String.format("%.0f", score),
+                                                color = Color.Black,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 11.sp
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -207,12 +257,15 @@ fun MatrixScreen(
 
                         Button(
                             onClick = { selectedQuadrant = null },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray, contentColor = Color.White),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF1E1E2C),
+                                contentColor = Color(0xFF03DAC6)
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 12.dp)
                         ) {
-                            Text("Close")
+                            Text("Close", fontWeight = FontWeight.Bold)
                         }
                     }
                 }

@@ -71,8 +71,9 @@ fun FocusListScreen(
                 fontWeight = FontWeight.Bold,
                 fontSize = 28.sp
             )
+            val total = activeTasks.size + completedTasks.size
             Text(
-                text = "${activeTasks.size} task${if (activeTasks.size == 1) "" else "s"}",
+                text = if (total > 0) "${completedTasks.size} / $total done" else "No tasks",
                 color = TEXT_SECONDARY,
                 fontSize = 13.sp,
                 modifier = Modifier.padding(bottom = 4.dp)
@@ -82,8 +83,21 @@ fun FocusListScreen(
             text = "Ranked by priority score",
             color = TEXT_SECONDARY,
             fontSize = 12.sp,
-            modifier = Modifier.padding(top = 2.dp, bottom = 16.dp)
+            modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
         )
+        // Progress bar — shows completion fraction of total lifetime tasks
+        val total = activeTasks.size + completedTasks.size
+        val fraction = if (total > 0) completedTasks.size.toFloat() / total else 0f
+        LinearProgressIndicator(
+            progress = { fraction },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .clip(RoundedCornerShape(2.dp)),
+            color = ACCENT_GREEN,
+            trackColor = DIVIDER
+        )
+        Spacer(Modifier.height(8.dp))
         HorizontalDivider(color = DIVIDER, modifier = Modifier.padding(bottom = 8.dp))
 
         if (activeTasks.isEmpty()) {
