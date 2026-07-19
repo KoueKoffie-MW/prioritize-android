@@ -1,5 +1,11 @@
 package com.example.prioritize.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -179,16 +185,29 @@ fun MainDashboard(
                 )
                 .background(Color(0xFF0F0F1A))
         ) {
-            // Exhaustive when — compiler enforces all DashboardTab cases are handled
-            when (selectedTab) {
-                DashboardTab.FOCUS      -> FocusListScreen(
-                    viewModel = viewModel,
-                    onBreakdownClick = { task -> activeTaskForBreakdown = task }
-                )
-                DashboardTab.SCRATCH_PAD -> ScratchPadScreen(viewModel = viewModel)
-                DashboardTab.MATRIX     -> MatrixScreen(viewModel = viewModel)
-                DashboardTab.HORIZON    -> HorizonScreen(viewModel = viewModel)
-                DashboardTab.BRAIN      -> BrainScreen(viewModel = viewModel)
+            // Animated tab transitions: higher-index tabs slide in from right
+            @OptIn(androidx.compose.animation.ExperimentalAnimationApi::class)
+            AnimatedContent(
+                targetState = selectedTab,
+                transitionSpec = {
+                    val forward = targetState.ordinal > initialState.ordinal
+                    val enter = slideInHorizontally { if (forward) it else -it } + fadeIn()
+                    val exit  = slideOutHorizontally { if (forward) -it else it } + fadeOut()
+                    enter togetherWith exit
+                },
+                label = "tabTransition"
+            ) { tab ->
+                // Exhaustive when — compiler enforces all DashboardTab cases are handled
+                when (tab) {
+                    DashboardTab.FOCUS      -> FocusListScreen(
+                        viewModel = viewModel,
+                        onBreakdownClick = { task -> activeTaskForBreakdown = task }
+                    )
+                    DashboardTab.SCRATCH_PAD -> ScratchPadScreen(viewModel = viewModel)
+                    DashboardTab.MATRIX     -> MatrixScreen(viewModel = viewModel)
+                    DashboardTab.HORIZON    -> HorizonScreen(viewModel = viewModel)
+                    DashboardTab.BRAIN      -> BrainScreen(viewModel = viewModel)
+                }
             }
         }
     }

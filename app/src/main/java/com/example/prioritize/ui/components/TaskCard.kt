@@ -409,25 +409,26 @@ fun SwipeableTaskCard(
     onBreakdownClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Migrate away from deprecated confirmValueChange — use LaunchedEffect on currentValue instead.
     val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            when (value) {
-                SwipeToDismissBoxValue.StartToEnd -> {
-                    // Swipe right → mark as complete
-                    // Return false: let the list recompose naturally (task moves to COMPLETED)
-                    onCompleteChange(true)
-                    false
-                }
-                SwipeToDismissBoxValue.EndToStart -> {
-                    // Swipe left → delete
-                    onDeleteClick()
-                    true
-                }
-                SwipeToDismissBoxValue.Settled -> false
-            }
-        },
         positionalThreshold = { totalDistance -> totalDistance * 0.38f }
     )
+
+    // React to swipe completion AFTER the state is committed
+    LaunchedEffect(dismissState.currentValue) {
+        when (dismissState.currentValue) {
+            SwipeToDismissBoxValue.StartToEnd -> {
+                // Swipe right → mark complete, snap card back (task disappears via list recomposition)
+                onCompleteChange(true)
+                dismissState.reset()
+            }
+            SwipeToDismissBoxValue.EndToStart -> {
+                // Swipe left → delete (task removed from DB; recomposition removes it)
+                onDeleteClick()
+            }
+            SwipeToDismissBoxValue.Settled -> { /* no-op */ }
+        }
+    }
 
     SwipeToDismissBox(
         state = dismissState,
