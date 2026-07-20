@@ -20,6 +20,7 @@ data class ChatMessage(
     val actionTask: Task? = null,
     val actionSpecialDate: SpecialDate? = null,
     val actionRepeatingTask: RepeatingTask? = null,
+    val thought: String? = null,
     val id: Long = 0
 )
 
@@ -31,7 +32,8 @@ fun parseChatMessage(
     documentPath: String? = null,
     id: Long = 0,
     timestamp: Long = System.currentTimeMillis(),
-    isPromoted: Boolean = false
+    isPromoted: Boolean = false,
+    thought: String? = null
 ): ChatMessage {
     var cleanText = response
     var actionTask: Task? = null
@@ -120,6 +122,7 @@ fun parseChatMessage(
         actionTask = actionTask,
         actionSpecialDate = actionSpecialDate,
         actionRepeatingTask = actionRepeatingTask,
+        thought = thought,
         id = id
     )
 }
@@ -133,7 +136,8 @@ fun ChatMessageEntity.toChatMessage(): ChatMessage {
         documentPath = this.documentPath,
         id = this.id,
         timestamp = this.timestamp,
-        isPromoted = this.isPromoted
+        isPromoted = this.isPromoted,
+        thought = this.thought
     )
 }
 
@@ -182,6 +186,7 @@ fun ChatMessage.toEntity(): ChatMessageEntity {
         isPromoted = this.isPromoted,
         imagePath = this.imagePath,
         audioPath = this.audioPath,
-        documentPath = this.documentPath
+        documentPath = this.documentPath,
+        thought = this.thought
     )
 }

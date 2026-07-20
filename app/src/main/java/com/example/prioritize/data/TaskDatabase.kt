@@ -11,7 +11,7 @@ import androidx.room.TypeConverters
 //   ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 @Database(
     entities = [Task::class, SubTask::class, UserProfile::class, RepeatingTask::class, SpecialDate::class, MemoryProfile::class, ObservationLog::class, ChatMessageEntity::class],
-    version = 9,
+    version = 10,
     exportSchema = true
 )
 @TypeConverters(AppTypeConverters::class)
@@ -41,7 +41,8 @@ abstract class TaskDatabase : RoomDatabase() {
                     Migrations.MIGRATION_5_6,
                     Migrations.MIGRATION_6_7,
                     Migrations.MIGRATION_7_8,
-                    Migrations.MIGRATION_8_9
+                    Migrations.MIGRATION_8_9,
+                    Migrations.MIGRATION_9_10
                 )
                 .build()
                 INSTANCE = instance

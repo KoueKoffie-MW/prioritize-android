@@ -16,5 +16,6 @@ data class ChatMessageEntity(
     val isPromoted: Boolean = false,
     val imagePath: String? = null,
     val audioPath: String? = null,
-    val documentPath: String? = null
+    val documentPath: String? = null,
+    val thought: String? = null
 )

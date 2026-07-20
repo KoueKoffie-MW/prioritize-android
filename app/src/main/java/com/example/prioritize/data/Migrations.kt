@@ -165,4 +165,10 @@ object Migrations {
             db.execSQL("CREATE INDEX IF NOT EXISTS index_observation_logs_is_processed_timestamp ON observation_logs (is_processed, timestamp)")
         }
     }
+
+    val MIGRATION_9_10 = object : Migration(9, 10) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE chat_messages ADD COLUMN thought TEXT")
+        }
+    }
 }
