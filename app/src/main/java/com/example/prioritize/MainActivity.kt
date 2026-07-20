@@ -22,7 +22,7 @@ import com.example.prioritize.ui.viewmodel.TaskViewModel
 class MainActivity : ComponentActivity() {
 
     private val database by lazy { TaskDatabase.getDatabase(applicationContext) }
-    private val repository by lazy { TaskRepository(database.taskDao()) }
+    private val repository by lazy { TaskRepository(database.taskDao(), database.chatMessageDao()) }
 
     private val viewModel: TaskViewModel by viewModels {
         TaskViewModel.Factory(application, repository)

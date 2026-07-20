@@ -46,6 +46,7 @@ class GitHubIssueService {
                 setRequestProperty("Accept", "application/vnd.github+json")
                 setRequestProperty("Content-Type", "application/json")
                 setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
+                setRequestProperty("User-Agent", "Prioritize-Android-App")
                 connectTimeout = 15_000
                 readTimeout = 15_000
                 doOutput = true

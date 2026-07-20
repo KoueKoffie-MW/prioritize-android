@@ -416,24 +416,42 @@ fun SwipeableTaskCard(
 ) {
     val haptic = LocalHapticFeedback.current
 
+    // Guard: only handle each swipe gesture ONCE. LaunchedEffect(currentValue) can fire
+    // multiple times during recomposition (especially when Room emits a new list).
+    // We track whether we've already acted on the current non-Settled state.
+    var swipeHandled by remember { mutableStateOf(false) }
+
     // Migrate away from deprecated confirmValueChange — use LaunchedEffect on currentValue instead.
     val dismissState = rememberSwipeToDismissBoxState(
-        positionalThreshold = { totalDistance -> totalDistance * 0.38f }
+        positionalThreshold = { totalDistance -> totalDistance * 0.60f }
     )
+
+    // Reset the guard whenever the card returns to Settled (user lets go without completing)
+    LaunchedEffect(dismissState.currentValue) {
+        if (dismissState.currentValue == SwipeToDismissBoxValue.Settled) {
+            swipeHandled = false
+        }
+    }
 
     // React to swipe completion AFTER the state is committed
     LaunchedEffect(dismissState.currentValue) {
         when (dismissState.currentValue) {
             SwipeToDismissBoxValue.StartToEnd -> {
-                // Swipe right → haptic + mark complete, snap card back
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                onCompleteChange(true)
-                dismissState.reset()
+                if (!swipeHandled) {
+                    swipeHandled = true
+                    // Swipe right → haptic + mark complete, snap card back
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onCompleteChange(true)
+                    dismissState.reset()
+                }
             }
             SwipeToDismissBoxValue.EndToStart -> {
-                // Swipe left → haptic + delete
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                onDeleteClick()
+                if (!swipeHandled) {
+                    swipeHandled = true
+                    // Swipe left → haptic + delete
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onDeleteClick()
+                }
             }
             SwipeToDismissBoxValue.Settled -> { /* no-op */ }
         }

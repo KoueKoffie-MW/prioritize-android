@@ -23,7 +23,7 @@ class DreamingWorker(
         Log.i("DreamingWorker", "Dreaming background consolidation worker started.")
 
         val database = TaskDatabase.getDatabase(applicationContext)
-        val repository = TaskRepository(database.taskDao())
+        val repository = TaskRepository(database.taskDao(), database.chatMessageDao())
         val parser = Gemma4Parser(applicationContext)
 
         val unprocessedLogs = repository.getUnprocessedLogs()

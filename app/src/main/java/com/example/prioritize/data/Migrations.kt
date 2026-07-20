@@ -80,7 +80,7 @@ object Migrations {
                     `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                     `timestamp` INTEGER NOT NULL,
                     `description` TEXT NOT NULL,
-                    `isProcessed` INTEGER NOT NULL DEFAULT 0
+                    `is_processed` INTEGER NOT NULL DEFAULT 0
                 )
             """.trimIndent())
         }
@@ -123,6 +123,46 @@ object Migrations {
         override fun migrate(db: SupportSQLiteDatabase) {
             // Add originalYear column to special_dates
             db.execSQL("ALTER TABLE special_dates ADD COLUMN originalYear INTEGER")
+        }
+    }
+
+    val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `chat_messages` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `sender` TEXT NOT NULL,
+                    `text` TEXT NOT NULL,
+                    `timestamp` INTEGER NOT NULL,
+                    `isPromoted` INTEGER NOT NULL DEFAULT 0,
+                    `imagePath` TEXT,
+                    `audioPath` TEXT
+                )
+            """.trimIndent())
+            
+            // Add userAccent and knownSpeakersJson to user_profile
+            db.execSQL("ALTER TABLE user_profile ADD COLUMN userAccent TEXT NOT NULL DEFAULT 'South African Afrikaans'")
+            db.execSQL("ALTER TABLE user_profile ADD COLUMN knownSpeakersJson TEXT NOT NULL DEFAULT '[]'")
+        }
+    }
+
+    val MIGRATION_6_7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE tasks ADD COLUMN isDeleted INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE tasks ADD COLUMN deletedAt INTEGER")
+        }
+    }
+
+    val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE chat_messages ADD COLUMN documentPath TEXT")
+        }
+    }
+
+    val MIGRATION_8_9 = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_chat_messages_timestamp ON chat_messages (timestamp)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_observation_logs_is_processed_timestamp ON observation_logs (is_processed, timestamp)")
         }
     }
 }

@@ -23,7 +23,9 @@ data class Task(
     val isScratchPadItem: Boolean = true, // True if dumped and not yet processed
     val createdAt: Long = System.currentTimeMillis(),
     val completedAt: Long? = null,
-    val isCompleted: Boolean = false
+    val isCompleted: Boolean = false,
+    val isDeleted: Boolean = false,
+    val deletedAt: Long? = null
 ) {
     // Dynamic recalculation of 3D priority score
     fun getPriorityScore(currentTime: Long = System.currentTimeMillis()): Double {

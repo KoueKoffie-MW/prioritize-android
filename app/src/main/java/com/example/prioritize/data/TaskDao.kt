@@ -5,23 +5,32 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TaskDao {
-    @Query("SELECT * FROM tasks WHERE isCompleted = 0 AND isScratchPadItem = 0")
+    @Query("SELECT * FROM tasks WHERE isCompleted = 0 AND isScratchPadItem = 0 AND isDeleted = 0")
     fun getActiveTasksFlow(): Flow<List<Task>>
 
-    @Query("SELECT * FROM tasks WHERE isCompleted = 0 AND isScratchPadItem = 0")
+    @Query("SELECT * FROM tasks WHERE isCompleted = 0 AND isScratchPadItem = 0 AND isDeleted = 0")
     suspend fun getActiveTasks(): List<Task>
 
-    @Query("SELECT * FROM tasks WHERE isScratchPadItem = 1 AND isCompleted = 0")
+    @Query("SELECT * FROM tasks WHERE isScratchPadItem = 1 AND isCompleted = 0 AND isDeleted = 0")
     fun getScratchPadTasksFlow(): Flow<List<Task>>
 
-    @Query("SELECT * FROM tasks WHERE isCompleted = 1 ORDER BY id DESC")
+    @Query("SELECT * FROM tasks WHERE isCompleted = 1 AND isDeleted = 0 ORDER BY id DESC")
     fun getCompletedTasksFlow(): Flow<List<Task>>
 
-    @Query("DELETE FROM tasks WHERE isCompleted = 1")
+    @Query("DELETE FROM tasks WHERE isCompleted = 1 AND isDeleted = 0")
     suspend fun deleteAllCompletedTasks()
+
+    @Query("SELECT * FROM tasks WHERE isDeleted = 1 ORDER BY deletedAt DESC")
+    fun getDeletedTasksFlow(): Flow<List<Task>>
+
+    @Query("DELETE FROM tasks WHERE isDeleted = 1")
+    suspend fun emptyRecycleBin()
 
     @Query("SELECT * FROM tasks WHERE id = :taskId LIMIT 1")
     suspend fun getTaskById(taskId: Long): Task?
+
+    @Query("SELECT * FROM tasks WHERE repeatingTaskId = :repeatingTaskId AND isCompleted = 0 AND isDeleted = 0")
+    suspend fun getActiveTasksForRepeatingTask(repeatingTaskId: Long): List<Task>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTask(task: Task): Long

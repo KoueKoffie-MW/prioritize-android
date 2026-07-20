@@ -7,5 +7,9 @@ import androidx.room.PrimaryKey
 data class UserProfile(
     @PrimaryKey val id: Int = 1,
     val systemPrompt: String,
-    val metadataJson: String = "{}" // Dynamic storage for preferences (e.g. wife's gift ideas)
+    val metadataJson: String = "{}",
+    val userAccent: String = "South African Afrikaans",
+    val knownSpeakersJson: String = "[]"
 )
+
+data class KnownSpeaker(val name: String, val accent: String)

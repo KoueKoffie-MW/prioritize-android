@@ -32,7 +32,8 @@ data class EdgeModelSpec(
     val filename: String,
     val downloadUrl: String,
     val recommendedRamGb: Double,
-    val supportsTools: Boolean = false
+    val supportsTools: Boolean = false,
+    val contextTokens: Int = 8192
 ) {
     val isNpuOnly: Boolean
         get() = id.contains("tensor_g5")
@@ -70,7 +71,8 @@ val AVAILABLE_MODELS: List<EdgeModelSpec> = listOf(
         filename = "gemma-4-E2B-it_Google_Tensor_G5.litertlm",
         downloadUrl = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it_Google_Tensor_G5.litertlm",
         recommendedRamGb = 8.0,
-        supportsTools = true
+        supportsTools = true,
+        contextTokens = 8192
     ),
     EdgeModelSpec(
         id = "gemma_4_e2b",
@@ -80,7 +82,8 @@ val AVAILABLE_MODELS: List<EdgeModelSpec> = listOf(
         filename = "gemma-4-E2B-it.litertlm",
         downloadUrl = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/6e5c4f1e395deb959c494953478fa5cec4b8008f/gemma-4-E2B-it.litertlm",
         recommendedRamGb = 8.0,
-        supportsTools = true
+        supportsTools = true,
+        contextTokens = 8192
     ),
     EdgeModelSpec(
         id = "gemma_4_e4b",
@@ -90,7 +93,8 @@ val AVAILABLE_MODELS: List<EdgeModelSpec> = listOf(
         filename = "gemma-4-E4B-it.litertlm",
         downloadUrl = "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/28299f30ee4d43294517a4ac93abd6163412f07f/gemma-4-E4B-it.litertlm",
         recommendedRamGb = 12.0,
-        supportsTools = true
+        supportsTools = true,
+        contextTokens = 8192
     ),
     EdgeModelSpec(
         id = "gemma_3n_e2b",
@@ -100,7 +104,8 @@ val AVAILABLE_MODELS: List<EdgeModelSpec> = listOf(
         filename = "gemma-3n-E2B-it-int4.litertlm",
         downloadUrl = "https://huggingface.co/google/gemma-3n-E2B-it-litert-lm/resolve/ba9ca88da013b537b6ed38108be609b8db1c3a16/gemma-3n-E2B-it-int4.litertlm",
         recommendedRamGb = 8.0,
-        supportsTools = true
+        supportsTools = true,
+        contextTokens = 8192
     ),
     EdgeModelSpec(
         id = "gemma_3n_e4b",
@@ -110,7 +115,8 @@ val AVAILABLE_MODELS: List<EdgeModelSpec> = listOf(
         filename = "gemma-3n-E4B-it-int4.litertlm",
         downloadUrl = "https://huggingface.co/google/gemma-3n-E4B-it-litert-lm/resolve/297ed75955702dec3503e00c2c2ecbbf475300bc/gemma-3n-E4B-it-int4.litertlm",
         recommendedRamGb = 12.0,
-        supportsTools = true
+        supportsTools = true,
+        contextTokens = 8192
     ),
     EdgeModelSpec(
         id = "gemma_3_1b",
@@ -120,7 +126,8 @@ val AVAILABLE_MODELS: List<EdgeModelSpec> = listOf(
         filename = "gemma3-1b-it-int4.litertlm",
         downloadUrl = "https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/42d538a932e8d5b12e6b3b455f5572560bd60b2c/gemma3-1b-it-int4.litertlm",
         recommendedRamGb = 6.0,
-        supportsTools = true
+        supportsTools = true,
+        contextTokens = 4096
     ),
     EdgeModelSpec(
         id = "qwen_2_5_1_5b",
@@ -130,7 +137,8 @@ val AVAILABLE_MODELS: List<EdgeModelSpec> = listOf(
         filename = "Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm",
         downloadUrl = "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/19edb84c69a0212f29a6ef17ba0d6f278b6a1614/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm",
         recommendedRamGb = 6.0,
-        supportsTools = false
+        supportsTools = false,
+        contextTokens = 4096
     ),
     EdgeModelSpec(
         id = "deepseek_r1_1_5b",
@@ -140,7 +148,8 @@ val AVAILABLE_MODELS: List<EdgeModelSpec> = listOf(
         filename = "DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm",
         downloadUrl = "https://huggingface.co/litert-community/DeepSeek-R1-Distill-Qwen-1.5B/resolve/e34bb88632342d1f9640bad579a45134eb1cf988/DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm",
         recommendedRamGb = 6.0,
-        supportsTools = false
+        supportsTools = false,
+        contextTokens = 4096
     ),
     EdgeModelSpec(
         id = "tiny_garden_270m",
@@ -150,7 +159,8 @@ val AVAILABLE_MODELS: List<EdgeModelSpec> = listOf(
         filename = "tiny_garden_q8_ekv1024.litertlm",
         downloadUrl = "https://huggingface.co/litert-community/functiongemma-270m-ft-tiny-garden/resolve/c205853ff82da86141a1105faa2344a8b176dfe7/tiny_garden_q8_ekv1024.litertlm",
         recommendedRamGb = 6.0,
-        supportsTools = true
+        supportsTools = true,
+        contextTokens = 1024
     ),
     EdgeModelSpec(
         id = "mobile_actions_270m_tensor_g5",
@@ -160,7 +170,8 @@ val AVAILABLE_MODELS: List<EdgeModelSpec> = listOf(
         filename = "functiongemma-270m-ft-mobile-actions_Google_Tensor_G5.litertlm",
         downloadUrl = "https://huggingface.co/litert-community/functiongemma-270m-ft-mobile-actions/resolve/main/functiongemma-270m-ft-mobile-actions_Google_Tensor_G5.litertlm",
         recommendedRamGb = 6.0,
-        supportsTools = true
+        supportsTools = true,
+        contextTokens = 1024
     ),
     EdgeModelSpec(
         id = "mobile_actions_270m",
@@ -170,6 +181,7 @@ val AVAILABLE_MODELS: List<EdgeModelSpec> = listOf(
         filename = "mobile_actions_q8_ekv1024.litertlm",
         downloadUrl = "https://huggingface.co/litert-community/functiongemma-270m-ft-mobile-actions/resolve/38942192c9b723af836d489074823ff33d4a3e7a/mobile_actions_q8_ekv1024.litertlm",
         recommendedRamGb = 6.0,
-        supportsTools = true
+        supportsTools = true,
+        contextTokens = 1024
     )
 )

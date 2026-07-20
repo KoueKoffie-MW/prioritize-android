@@ -49,20 +49,30 @@ class GitHubAuthManager(private val context: Context) {
     /**
      * Initiates the GitHub Device Flow:
      * 1. Requests a device_code + user_code from GitHub.
-     * 2. Opens verification_uri_complete in the browser (code pre-filled —
-     *    user just taps "Authorize" with no typing required).
+     * 2. Opens the verification URI in the browser. If GitHub returns
+     *    verification_uri_complete, the code is pre-filled. Otherwise the user
+     *    must enter [onUserCodeReady]'s code manually at github.com/login/device.
      * 3. Polls GitHub until the user authorizes or the code expires.
      * 4. Fetches the authenticated username and stores token + username.
      *
+     * @param onUserCodeReady Called immediately before the browser is opened,
+     *   with the human-readable code (e.g. "AB12-CD34") the user must enter.
+     *   Use this to show a snackbar / dialog in case the browser doesn't pre-fill.
+     *
      * Should be called from a coroutine scope. Returns [DeviceFlowResult].
      */
-    suspend fun startDeviceFlow(): DeviceFlowResult = withContext(Dispatchers.IO) {
+    suspend fun startDeviceFlow(onUserCodeReady: (String) -> Unit = {}): DeviceFlowResult = withContext(Dispatchers.IO) {
         // Step 1: Request device and user codes
         val deviceCodeResponse = requestDeviceCode()
             ?: return@withContext DeviceFlowResult.Error("Failed to contact GitHub. Check network connection.")
 
         val deviceCode = deviceCodeResponse.optString("device_code")
-        val verificationUriComplete = deviceCodeResponse.optString("verification_uri_complete")
+        val userCode = deviceCodeResponse.optString("user_code")
+        // GitHub may return either verification_uri_complete (pre-filled code) or just
+        // verification_uri (user must enter the code manually). Fall back gracefully.
+        val verificationUriComplete = deviceCodeResponse.optString("verification_uri_complete").ifBlank {
+            deviceCodeResponse.optString("verification_uri") // fallback
+        }
         val interval = deviceCodeResponse.optInt("interval", 5)
         val expiresIn = deviceCodeResponse.optInt("expires_in", 900)
 
@@ -70,7 +80,12 @@ class GitHubAuthManager(private val context: Context) {
             return@withContext DeviceFlowResult.Error("Invalid response from GitHub: missing device_code or verification_uri.")
         }
 
-        // Step 2: Open verification URL — code is pre-filled, user just taps Authorize
+        // Notify caller of the user code before opening the browser
+        withContext(Dispatchers.Main) { onUserCodeReady(userCode) }
+
+        // Step 2: Open verification URL — if complete URL available, code is pre-filled.
+        // Otherwise user must enter userCode manually at verification_uri.
+        Log.i(TAG, "Opening GitHub verification URI. userCode=$userCode uri=$verificationUriComplete")
         withContext(Dispatchers.Main) {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(verificationUriComplete)).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -94,11 +109,16 @@ class GitHubAuthManager(private val context: Context) {
                         .putString(KEY_USERNAME, resolvedUsername)
                         .apply()
                     Log.i(TAG, "GitHub login successful for: $resolvedUsername")
-                    return@withContext DeviceFlowResult.Success(resolvedUsername)
+                    return@withContext DeviceFlowResult.Success(resolvedUsername, userCode)
                 }
-                is PollResult.Pending -> continue
-                is PollResult.SlowDown -> { currentInterval += 5 }
-                is PollResult.Error -> return@withContext DeviceFlowResult.Error(poll.message)
+                is PollResult.Pending    -> continue
+                is PollResult.SlowDown   -> { currentInterval += 5 }
+                // Transient network blip (DNS, timeout) — log and retry, don't abort
+                is PollResult.NetworkError -> {
+                    Log.w(TAG, "Retrying after network error: ${poll.cause}")
+                    continue
+                }
+                is PollResult.Error      -> return@withContext DeviceFlowResult.Error(poll.message)
             }
         }
         DeviceFlowResult.Error("Authorization timed out. Please try again.")
@@ -120,6 +140,7 @@ class GitHubAuthManager(private val context: Context) {
                 requestMethod = "POST"
                 setRequestProperty("Accept", "application/json")
                 setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+                setRequestProperty("User-Agent", "Prioritize-Android-App")
                 connectTimeout = 10_000
                 readTimeout = 10_000
                 doOutput = true
@@ -142,8 +163,9 @@ class GitHubAuthManager(private val context: Context) {
                 requestMethod = "POST"
                 setRequestProperty("Accept", "application/json")
                 setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-                connectTimeout = 10_000
-                readTimeout = 15_000
+                setRequestProperty("User-Agent", "Prioritize-Android-App")
+                connectTimeout = 15_000  // longer timeout for background network recovery
+                readTimeout    = 20_000
                 doOutput = true
             }
             val body = "client_id=$CLIENT_ID" +
@@ -166,9 +188,18 @@ class GitHubAuthManager(private val context: Context) {
                 else ->
                     PollResult.Error(response.optString("error_description", "Unknown error during poll."))
             }
+        } catch (e: java.net.UnknownHostException) {
+            Log.w(TAG, "Token poll DNS failure — will retry: ${e.message}")
+            PollResult.NetworkError("DNS: ${e.message}")
+        } catch (e: java.net.SocketTimeoutException) {
+            Log.w(TAG, "Token poll timed out — will retry: ${e.message}")
+            PollResult.NetworkError("Timeout: ${e.message}")
+        } catch (e: java.io.IOException) {
+            Log.w(TAG, "Token poll IO error — will retry: ${e.message}")
+            PollResult.NetworkError("IO: ${e.message}")
         } catch (e: Exception) {
-            Log.e(TAG, "Token poll failed", e)
-            PollResult.Error(e.message ?: "Network error during authorization poll.")
+            Log.e(TAG, "Token poll unexpected error", e)
+            PollResult.Error(e.message ?: "Unexpected error during authorization poll.")
         }
     }
 
@@ -180,6 +211,7 @@ class GitHubAuthManager(private val context: Context) {
                 requestMethod = "GET"
                 setRequestProperty("Authorization", "Bearer $token")
                 setRequestProperty("Accept", "application/vnd.github+json")
+                setRequestProperty("User-Agent", "Prioritize-Android-App")
                 connectTimeout = 10_000
                 readTimeout = 10_000
             }
@@ -194,7 +226,7 @@ class GitHubAuthManager(private val context: Context) {
     // ── Result types ─────────────────────────────────────────────────────────
 
     sealed class DeviceFlowResult {
-        data class Success(val username: String) : DeviceFlowResult()
+        data class Success(val username: String, val userCode: String = "") : DeviceFlowResult()
         data class Error(val message: String) : DeviceFlowResult()
     }
 
@@ -202,6 +234,9 @@ class GitHubAuthManager(private val context: Context) {
         data class Success(val token: String) : PollResult()
         object Pending : PollResult()
         object SlowDown : PollResult()
+        /** Fatal GitHub API error — stop polling immediately. */
         data class Error(val message: String) : PollResult()
+        /** Transient network failure (DNS blip, timeout) — retry silently. */
+        data class NetworkError(val cause: String) : PollResult()
     }
 }

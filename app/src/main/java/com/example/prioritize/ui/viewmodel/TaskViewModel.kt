@@ -19,6 +19,7 @@ import com.example.prioritize.data.ObservationLog
 import com.example.prioritize.data.RecurrenceType
 import com.example.prioritize.data.SpecialDateType
 import com.example.prioritize.data.TaskRepository
+import com.example.prioritize.data.ChatMessageEntity
 import com.example.prioritize.worker.DreamingWorker
 import com.example.prioritize.github.GitHubAuthManager
 import com.example.prioritize.github.GitHubIssueService
@@ -57,6 +58,9 @@ class TaskViewModel(
     private val _isGitHubLoggingIn = MutableStateFlow(false)
     val isGitHubLoggingIn = _isGitHubLoggingIn.asStateFlow()
 
+    private val _gitHubUserCode = MutableStateFlow<String?>(null)
+    val gitHubUserCode = _gitHubUserCode.asStateFlow()
+
     /** True when a GitHub OAuth token is stored on-device. Recomputed on demand. */
     private val _isGitHubLoggedIn = MutableStateFlow(gitHubAuth.isLoggedIn)
     val isGitHubLoggedIn = _isGitHubLoggedIn.asStateFlow()
@@ -71,7 +75,10 @@ class TaskViewModel(
         if (_isGitHubLoggingIn.value) return
         _isGitHubLoggingIn.value = true
         viewModelScope.launch {
-            val result = gitHubAuth.startDeviceFlow()
+            val result = gitHubAuth.startDeviceFlow(
+                onUserCodeReady = { code -> _gitHubUserCode.value = code }
+            )
+            _gitHubUserCode.value = null
             _isGitHubLoggedIn.value = gitHubAuth.isLoggedIn
             _isGitHubLoggingIn.value = false
             if (result is GitHubAuthManager.DeviceFlowResult.Error) {
@@ -187,9 +194,34 @@ class TaskViewModel(
     val completedTasks: StateFlow<List<Task>> = repository.completedTasksFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Flow of deleted tasks (Recycle Bin)
+    val deletedTasks: StateFlow<List<Task>> = repository.deletedTasksFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // User profile flow
     val userProfile: StateFlow<UserProfile?> = repository.userProfileFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val userAccent: StateFlow<String> = repository.userProfileFlow
+        .map { it?.userAccent ?: "South African Afrikaans" }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "South African Afrikaans")
+
+    val knownSpeakers: StateFlow<List<com.example.prioritize.data.KnownSpeaker>> = repository.userProfileFlow
+        .map { profile ->
+            val json = profile?.knownSpeakersJson ?: "[]"
+            try {
+                val arr = JSONArray(json)
+                val list = mutableListOf<com.example.prioritize.data.KnownSpeaker>()
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    list.add(com.example.prioritize.data.KnownSpeaker(obj.getString("name"), obj.getString("accent")))
+                }
+                list
+            } catch(e: Exception) {
+                emptyList()
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Repeating tasks flow
     val repeatingTasks: StateFlow<List<RepeatingTask>> = repository.repeatingTasksFlow
@@ -214,8 +246,26 @@ class TaskViewModel(
     private val _chatMessages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val chatMessages: StateFlow<List<ChatMessage>> = _chatMessages.asStateFlow()
 
+    // Expose context size percentage meter
+    val contextFillRatio: StateFlow<Float> = Gemma4Parser.contextFillRatio
+
+    // Document attachment states
+    private val _attachedDocUri = MutableStateFlow<android.net.Uri?>(null)
+    val attachedDocUri: StateFlow<android.net.Uri?> = _attachedDocUri.asStateFlow()
+
+    private val _attachedDocName = MutableStateFlow<String?>(null)
+    val attachedDocName: StateFlow<String?> = _attachedDocName.asStateFlow()
+
+    fun setAttachedDoc(uri: android.net.Uri?, name: String?) {
+        _attachedDocUri.value = uri
+        _attachedDocName.value = name
+    }
+
     private val _isChatLoading = MutableStateFlow(false)
     val isChatLoading: StateFlow<Boolean> = _isChatLoading.asStateFlow()
+
+    private val _chatAttachmentStatus = MutableStateFlow<String?>(null)
+    val chatAttachmentStatus: StateFlow<String?> = _chatAttachmentStatus.asStateFlow()
 
     private val _onboardingPhase = MutableStateFlow(0) // 0 = idle brainstorming, 1 = dynamic interview active
     val onboardingPhase: StateFlow<Int> = _onboardingPhase.asStateFlow()
@@ -307,6 +357,14 @@ class TaskViewModel(
             }
         }
 
+        // Observe persistent chat messages from SQLite
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.chatMessagesFlow.collect { entities ->
+                val uiMsgs = entities.map { it.toChatMessage() }
+                _chatMessages.value = uiMsgs
+            }
+        }
+
         // Initialize default user profile if empty
         viewModelScope.launch(Dispatchers.IO) {
             val profile = repository.getUserProfile()
@@ -315,7 +373,9 @@ class TaskViewModel(
                     UserProfile(
                         id = 1,
                         systemPrompt = "You are a supportive ADHD executive function assistant and second brain. Help the user clarify, break down, and prioritize tasks.",
-                        metadataJson = "{}"
+                        metadataJson = "{}",
+                        userAccent = "South African Afrikaans",
+                        knownSpeakersJson = "[]"
                     )
                 )
             } else {
@@ -853,8 +913,7 @@ class TaskViewModel(
 
     fun deleteTask(task: Task) {
         viewModelScope.launch(Dispatchers.IO) {
-            repository.deleteTask(task)
-            repository.deleteSubTasksForTask(task.id)
+            repository.updateTask(task.copy(isDeleted = true, deletedAt = System.currentTimeMillis()))
             evolveProfileOnEvent("User deleted task: '${task.title}'.")
         }
     }
@@ -907,20 +966,87 @@ class TaskViewModel(
         )
     }
 
-    fun sendMessageToBrain(text: String) {
-        if (text.isBlank()) return
-        // Use + operator for immutable list update instead of mutable list mutation
-        val currentMsgs = (_chatMessages.value + ChatMessage(MessageSender.USER, text)).toMutableList()
-        _chatMessages.value = currentMsgs
+    private fun copyAttachmentToInternal(context: Context, sourcePath: String): String {
+        val srcFile = File(sourcePath)
+        if (!srcFile.exists()) return sourcePath
+        val destDir = File(context.filesDir, "chat_attachments")
+        if (!destDir.exists()) destDir.mkdirs()
+        val destFile = File(destDir, "${System.currentTimeMillis()}_${srcFile.name}")
+        try {
+            srcFile.copyTo(destFile, overwrite = true)
+            return destFile.absolutePath
+        } catch (e: Exception) {
+            Log.e("TaskViewModel", "Failed to copy attachment: $sourcePath", e)
+            return sourcePath
+        }
+    }
 
+    fun sendMessageToBrain(
+        text: String,
+        attachedImagePath: android.net.Uri? = null,
+        attachedAudioPath: android.net.Uri? = null,
+        attachedDocPath: android.net.Uri? = null
+    ) {
+        if (text.isBlank() && attachedImagePath == null && attachedAudioPath == null && attachedDocPath == null) return
+        
         _isChatLoading.value = true
+        _chatAttachmentStatus.value = "Preparing message..."
 
         viewModelScope.launch {
+            val context = getApplication<Application>().applicationContext
+            
+            // 1. Copy attachments to internal storage to persist them safely
+            val savedImagePath = attachedImagePath?.let { uri ->
+                withContext(Dispatchers.IO) {
+                    val path = getPathFromUri(context, uri)
+                    path?.let { copyAttachmentToInternal(context, it) }
+                }
+            }
+            val savedAudioPath = attachedAudioPath?.let { uri ->
+                withContext(Dispatchers.IO) {
+                    val path = getPathFromUri(context, uri)
+                    path?.let { copyAttachmentToInternal(context, it) }
+                }
+            }
+            val savedDocPath = attachedDocPath?.let { uri ->
+                withContext(Dispatchers.IO) {
+                    val path = getPathFromUri(context, uri)
+                    path?.let { copyAttachmentToInternal(context, it) }
+                }
+            }
+            // Pre-flight RAM protection check
+            val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            val memInfo = android.app.ActivityManager.MemoryInfo()
+            activityManager.getMemoryInfo(memInfo)
+            val availMemMb = memInfo.availMem / (1024 * 1024)
+            Log.d("TaskViewModel", "Inference pre-flight RAM: Avail = $availMemMb MB, lowMemory = ${memInfo.lowMemory}")
+            if (memInfo.lowMemory || availMemMb < 200) {
+                _aiErrorMsg.value = "Low memory warning! Available RAM ($availMemMb MB) is too low for reliable on-device inference. Please close background apps or tap 'Compact conversation'."
+                _isChatLoading.value = false
+                _chatAttachmentStatus.value = null
+                return@launch
+            }
+
+            // 2. Insert user message to Room (observed asynchronously to update UI)
+            withContext(Dispatchers.IO) {
+                repository.insertChatMessage(
+                    ChatMessageEntity(
+                        sender = "USER",
+                        text = text,
+                        timestamp = System.currentTimeMillis(),
+                        imagePath = savedImagePath,
+                        audioPath = savedAudioPath,
+                        documentPath = savedDocPath
+                    )
+                )
+            }
+
             val profile = repository.getUserProfile()
             val systemPrompt = profile?.systemPrompt ?: ""
 
             if (_onboardingPhase.value == 1) {
                 // Dynamic Onboarding/Refinement Interview flow
+                val historyList = repository.chatMessagesFlow.first().map { it.toChatMessage() }
                 val prompt = """
                     You are Gemma, an executive function coach conducting an onboarding/refinement interview to build Jan's cognitive profile.
                     Jan is an engineer, husband to Angelique (anniversary Apr 7, birthday Sep 22), father to Ansunet (birthday Nov 8) and Johan-Henry (birthday Nov 20).
@@ -936,7 +1062,7 @@ class TaskViewModel(
                     ###INTERVIEW_COMPLETE### followed by the updated complete system prompt. Do not output anything else.
                     
                     Interview History (Last 5 messages):
-                    ${currentMsgs.takeLast(5).joinToString("\n") { "${it.sender.name}: ${it.text}" }}
+                    ${historyList.takeLast(5).joinToString("\n") { "${it.sender.name}: ${it.text}" }}
                     
                     AI Response:
                 """.trimIndent()
@@ -949,16 +1075,76 @@ class TaskViewModel(
                     val finalPrompt = aiResponse.substringAfter("###INTERVIEW_COMPLETE###").trim()
                     updateSystemPrompt(finalPrompt)
                     _onboardingPhase.value = 0
-                    currentMsgs.add(ChatMessage(MessageSender.AI, "Awesome! Your personalized second brain system prompt has been generated and saved. You can read or edit it at the top of the screen. Let's brainstorm some tasks now!"))
-                    _chatMessages.value = currentMsgs
-                    _isChatLoading.value = false
+                    
+                    withContext(Dispatchers.IO) {
+                        repository.insertChatMessage(
+                            ChatMessageEntity(
+                                sender = "AI",
+                                text = "Awesome! Your personalized second brain system prompt has been generated and saved. You can read or edit it at the top of the screen. Let's brainstorm some tasks now!",
+                                timestamp = System.currentTimeMillis()
+                            )
+                        )
+                    }
                 } else {
-                    currentMsgs.add(ChatMessage(MessageSender.AI, aiResponse))
-                    _chatMessages.value = currentMsgs
-                    _isChatLoading.value = false
+                    withContext(Dispatchers.IO) {
+                        repository.insertChatMessage(
+                            ChatMessageEntity(
+                                sender = "AI",
+                                text = aiResponse,
+                                timestamp = System.currentTimeMillis()
+                            )
+                        )
+                    }
                 }
+                _isChatLoading.value = false
+                _chatAttachmentStatus.value = null
             } else {
-                // 1. Keyword Scan RAG memory profiles
+                // 1. Fetch cloudApiKey
+                var cloudApiKey: String? = null
+                profile?.let { prof ->
+                    try {
+                        val meta = JSONObject(prof.metadataJson)
+                        if (meta.has("gemini_api_key")) {
+                            cloudApiKey = meta.getString("gemini_api_key").trim()
+                        }
+                    } catch (e: Exception) {}
+                }
+
+                val summarySection = try {
+                    val json = JSONObject(profile?.metadataJson ?: "{}")
+                    if (json.has("compaction_summary")) {
+                        val s = json.getString("compaction_summary").trim()
+                        if (s.isNotEmpty()) {
+                            "### CONVERSATION SUMMARY ###\n$s\n"
+                        } else ""
+                    } else ""
+                } catch (e: Exception) { "" }
+
+                // 2. Resolve document type and read content
+                var docPromptText = ""
+                var pdfBitmapForLocalMultimodal: android.graphics.Bitmap? = null
+                var isPdf = false
+                savedDocPath?.let { path ->
+                    val ext = path.substringAfterLast('.', "").lowercase()
+                    isPdf = ext == "pdf"
+                    val isTextFile = ext == "txt" || ext == "md" || ext == "log" || ext == "json" || ext == "csv"
+                    if (isTextFile) {
+                        try {
+                            val fileContent = File(path).readText()
+                            val filename = File(path).name.substringAfter('_')
+                            docPromptText = "\n\n### ATTACHED FILE: $filename ###\n```text\n$fileContent\n```\n"
+                            Log.d("TaskViewModel", "Injected text file attachment: $filename, size=${fileContent.length}")
+                        } catch (e: Exception) {
+                            Log.e("TaskViewModel", "Failed to read text attachment content", e)
+                        }
+                    } else if (isPdf && cloudApiKey.isNullOrBlank()) {
+                        // Local mode PDF: render page 1 to bitmap
+                        pdfBitmapForLocalMultimodal = renderPdfPageToBitmap(context, path, 0)
+                        Log.d("TaskViewModel", "Rendered PDF first page as image bitmap for local OCR")
+                    }
+                }
+
+                // 3. Keyword Scan RAG memory profiles
                 val allProfiles = repository.getMemoryProfiles()
                 val matchedFacts = mutableListOf<String>()
                 allProfiles.forEach { mp ->
@@ -978,7 +1164,7 @@ class TaskViewModel(
                     ""
                 }
 
-                // 2. Date and Deadline context
+                // 4. Date and Deadline context
                 val cal = Calendar.getInstance()
                 val dateFormat = java.text.SimpleDateFormat("EEEE, dd MMMM yyyy", java.util.Locale.getDefault())
                 val todayStr = dateFormat.format(cal.time)
@@ -998,8 +1184,22 @@ class TaskViewModel(
                     ""
                 }
 
-                // 3. Capped conversation history (last 5 messages)
-                val cappedHistory = currentMsgs.takeLast(5).joinToString("\n") { "${it.sender.name}: ${it.text}" }
+                // 5. Stateless context compilation (last 8 rolling + promoted messages)
+                val allMsgs = withContext(Dispatchers.IO) { repository.chatMessagesFlow.first() }
+                val promoted = allMsgs.filter { it.isPromoted }
+                val last8 = allMsgs.takeLast(8)
+                val contextMsgs = (promoted + last8).distinctBy { it.id }.sortedBy { it.timestamp }.map { it.toChatMessage() }
+                
+                val cappedHistory = contextMsgs.joinToString("\n") {
+                    val contextPin = if (it.isPromoted) " [PINNED CONTEXT]" else ""
+                    "${it.sender.name}: ${it.text}$contextPin"
+                }
+
+                val userPromptText = if (docPromptText.isNotEmpty()) {
+                    "\"$text\"$docPromptText"
+                } else {
+                    "\"$text\""
+                }
 
                 val promptContext = """
                     $systemPrompt
@@ -1010,11 +1210,12 @@ class TaskViewModel(
                     
                     $matchedFactsSection
                     
-                    The user says: "$text"
+                    $summarySection
+                    The user says: $userPromptText
                     Brainstorm with them. Support them, reduce overwhelm, and suggest concrete actions.
                     Use the matched offline memories and deadlines context if relevant. Keep responses brief.
                     
-                    Conversation History (Last 5 messages):
+                    Conversation History (Rolling 8 + Pinned contexts):
                     $cappedHistory
                     
                     If you need to search the web to answer the user's question (e.g. they ask about scheduling, local events, pickup dates, weather, or facts), respond ONLY with this line:
@@ -1028,38 +1229,94 @@ For repeating/recurring tasks, append:
 
                 Log.d("RAG_Telemetry", "Final chat prompt compiled size: ${promptContext.length} chars (~${promptContext.length / 4} tokens)")
 
-                val rawResult = withContext(Dispatchers.Default) {
-                    parser.runRawInference(promptContext)
-                }
-                if (rawResult == null) {
-                    val isNpuModel = _activeModelSpec.value.filename.contains("Tensor_G5")
-                    val isCpuOrGpu = activeBackend.startsWith("CPU") || activeBackend.startsWith("GPU")
-                    if (isNpuModel && isCpuOrGpu) {
-                        _aiErrorMsg.value = "Chat fallback triggered. The Tensor G5 NPU precompiled model cannot run on CPU. Please switch to the standard 'Gemma 4 E2B (Thinking)' model in Settings."
+                var aiResponse = "I'm listening, tell me more."
+                try {
+                    if (!cloudApiKey.isNullOrBlank() && (savedImagePath != null || savedAudioPath != null || (savedDocPath != null && isPdf))) {
+                        _chatAttachmentStatus.value = "Sending attachments to cloud..."
+                        val imageBitmap = savedImagePath?.let {
+                            android.graphics.BitmapFactory.decodeFile(it)
+                        }
+                        val audioBytes = savedAudioPath?.let {
+                            withContext(Dispatchers.IO) { File(it).readBytes() }
+                        }
+                        val docBytes = if (savedDocPath != null && isPdf) {
+                            withContext(Dispatchers.IO) { File(savedDocPath).readBytes() }
+                        } else null
+                        
+                        val attachmentBytes = audioBytes ?: docBytes
+                        val attachmentMime = if (audioBytes != null) {
+                            val ext = savedAudioPath?.substringAfterLast('.', "mp3")?.lowercase() ?: "mp3"
+                            when (ext) {
+                                "mp3" -> "audio/mp3"
+                                "m4a", "mp4" -> "audio/m4a"
+                                "wav" -> "audio/wav"
+                                "ogg" -> "audio/ogg"
+                                "aac" -> "audio/aac"
+                                else -> "audio/mp3"
+                            }
+                        } else {
+                            "application/pdf"
+                        }
+                        
+                        aiResponse = runGeminiCloudInference(cloudApiKey!!, promptContext, imageBitmap, attachmentBytes, attachmentMime)
+                            ?: "No response from Cloud Gemini."
                     } else {
-                        _aiErrorMsg.value = "Chat fallback triggered. Please verify your active model in Settings."
-                    }
-                }
-                var aiResponse = rawResult ?: "I'm listening, tell me more."
+                        val imageBitmap = (savedImagePath?.let {
+                            try {
+                                android.graphics.BitmapFactory.decodeFile(it)
+                            } catch (e: Exception) {
+                                Log.e("BrainInference", "Failed to decode image $it", e)
+                                null
+                            }
+                        }) ?: pdfBitmapForLocalMultimodal
+                        
+                        val audioBytes = savedAudioPath?.let {
+                            try {
+                                _chatAttachmentStatus.value = "Decoding audio file..."
+                                withContext(Dispatchers.IO) {
+                                    com.example.prioritize.audio.AudioDecoder.decodeToPcm(it)
+                                }
+                            } catch (e: Exception) {
+                                Log.e("BrainInference", "Failed to decode audio PCM $it", e)
+                                null
+                            }
+                        }
 
-                // RAG Agent Web Search check
-                if (aiResponse.contains("###SEARCH_CALL###")) {
-                    try {
+                        _chatAttachmentStatus.value = "Thinking..."
+                        val rawResult = withContext(Dispatchers.Default) {
+                            parser.runMultimodalInference(promptContext, imageBitmap, audioBytes)
+                        }
+                        if (rawResult == null) {
+                            val isNpuModel = _activeModelSpec.value.filename.contains("Tensor_G5")
+                            val isCpuOrGpu = activeBackend.startsWith("CPU") || activeBackend.startsWith("GPU")
+                            if (isNpuModel && isCpuOrGpu) {
+                                _aiErrorMsg.value = "Chat fallback triggered. The Tensor G5 NPU precompiled model cannot run on CPU. Please switch to the standard 'Gemma 4 E2B (Thinking)' model in Settings."
+                            } else {
+                                _aiErrorMsg.value = "Chat fallback triggered. Please verify your active model in Settings."
+                            }
+                        }
+                        aiResponse = rawResult ?: "I'm listening, tell me more."
+                    }
+
+                    // RAG Agent Web Search check
+                    if (aiResponse.contains("###SEARCH_CALL###")) {
                         val parts = aiResponse.split("###SEARCH_CALL###")
                         val json = JSONObject(parts[1].trim())
                         val searchQuery = json.getString("query")
                         
-                        // Add temporary search indicator
-                        currentMsgs.add(ChatMessage(MessageSender.AI, "🔍 Searching the web for: \"$searchQuery\"..."))
-                        _chatMessages.value = currentMsgs.toList()
+                        _chatAttachmentStatus.value = "Searching..."
+                        val searchIndicatorId = withContext(Dispatchers.IO) {
+                            repository.insertChatMessage(
+                                ChatMessageEntity(
+                                    sender = "AI",
+                                    text = "🔍 Searching the web for: \"$searchQuery\"...",
+                                    timestamp = System.currentTimeMillis()
+                                )
+                            )
+                        }
                         
-                        // Perform local search scrape
                         val searchResults = performWebSearch(searchQuery)
                         
-                        // Remove search indicator
-                        currentMsgs.removeAt(currentMsgs.size - 1)
-                        
-                        // Re-prompt with context
                         val ragPrompt = """
                             Current system profile:
                             $systemPrompt
@@ -1075,83 +1332,64 @@ For repeating/recurring tasks, append:
 ###REPEATING_TASK_SUGGESTION### {"title": "Task title", "description": "Desc", "importance": 1..10, "urgency": 1..10, "recurrenceType": "DAILY/WEEKLY/MONTHLY/YEARLY", "intervalValue": 1}
                         """.trimIndent()
                         
-                        aiResponse = withContext(Dispatchers.Default) {
-                            parser.runRawInference(ragPrompt)
-                        } ?: "Failed to retrieve search response."
-                    } catch(e: Exception) {
-                        Log.e("ChatSearch", "RAG loop failed", e)
-                        aiResponse = "I tried to search the web but encountered an error: ${e.message}"
+                        if (!cloudApiKey.isNullOrBlank() && (savedImagePath != null || savedAudioPath != null || (savedDocPath != null && isPdf))) {
+                            val imageBitmap = savedImagePath?.let { android.graphics.BitmapFactory.decodeFile(it) }
+                            val audioBytes = savedAudioPath?.let { withContext(Dispatchers.IO) { File(it).readBytes() } }
+                            val docBytes = if (savedDocPath != null && isPdf) {
+                                withContext(Dispatchers.IO) { File(savedDocPath).readBytes() }
+                            } else null
+                            
+                            val attachmentBytes = audioBytes ?: docBytes
+                            val attachmentMime = if (audioBytes != null) {
+                                val ext = savedAudioPath?.substringAfterLast('.', "mp3")?.lowercase() ?: "mp3"
+                                when (ext) {
+                                    "mp3" -> "audio/mp3"
+                                    "m4a", "mp4" -> "audio/m4a"
+                                    "wav" -> "audio/wav"
+                                    "ogg" -> "audio/ogg"
+                                    "aac" -> "audio/aac"
+                                    else -> "audio/mp3"
+                                }
+                            } else {
+                                "application/pdf"
+                            }
+                            aiResponse = runGeminiCloudInference(cloudApiKey!!, ragPrompt, imageBitmap, attachmentBytes, attachmentMime)
+                                ?: "Failed to retrieve search response."
+                        } else {
+                            val imageBitmap = (savedImagePath?.let { android.graphics.BitmapFactory.decodeFile(it) }) ?: pdfBitmapForLocalMultimodal
+                            val audioBytes = savedAudioPath?.let {
+                                withContext(Dispatchers.IO) { com.example.prioritize.audio.AudioDecoder.decodeToPcm(it) }
+                            }
+                            aiResponse = withContext(Dispatchers.Default) {
+                                parser.runMultimodalInference(ragPrompt, imageBitmap, audioBytes)
+                            } ?: "Failed to retrieve search response."
+                        }
                     }
+
+                    val aiMsg = parseChatMessage(MessageSender.AI, aiResponse)
+                    withContext(Dispatchers.IO) {
+                        repository.insertChatMessage(
+                            aiMsg.toEntity().copy(timestamp = System.currentTimeMillis())
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.e("TaskViewModel", "Error in chat generation", e)
+                    _aiErrorMsg.value = "Failed to process message: ${e.message}"
+                    withContext(Dispatchers.IO) {
+                        repository.insertChatMessage(
+                            ChatMessageEntity(
+                                sender = "SYSTEM_ERROR",
+                                text = "Error: ${e.message ?: "Failed to process image/audio attachment."}",
+                                timestamp = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                } finally {
+                    _isChatLoading.value = false
+                    _chatAttachmentStatus.value = null
                 }
-
-                val aiMsg = parseChatMessage(aiResponse)
-                currentMsgs.add(aiMsg)
-                _chatMessages.value = currentMsgs
-                _isChatLoading.value = false
             }
         }
-    }
-
-    private fun parseChatMessage(response: String): ChatMessage {
-        var cleanText = response
-        var actionTask: Task? = null
-        var actionSpecialDate: SpecialDate? = null
-        var actionRepeatingTask: RepeatingTask? = null
-        
-        if (cleanText.contains("###TASK_SUGGESTION###")) {
-            val parts = cleanText.split("###TASK_SUGGESTION###")
-            cleanText = parts[0].trim()
-            try {
-                val json = JSONObject(parts[1].trim())
-                actionTask = Task(
-                    title = json.getString("title"),
-                    description = json.optString("description", ""),
-                    importance = json.optInt("importance", 5).coerceIn(1, 10),
-                    urgency = json.optInt("urgency", 5).coerceIn(1, 10),
-                    isScratchPadItem = true
-                )
-            } catch(e: Exception) {
-                Log.e("ChatParser", "Failed to parse task suggestion JSON", e)
-            }
-        }
-        
-        if (cleanText.contains("###DATE_SUGGESTION###")) {
-            val parts = cleanText.split("###DATE_SUGGESTION###")
-            cleanText = parts[0].trim()
-            try {
-                val json = JSONObject(parts[1].trim())
-                actionSpecialDate = SpecialDate(
-                    name = json.getString("name"),
-                    dateMonth = json.getInt("month"),
-                    dateDay = json.getInt("day"),
-                    type = SpecialDateType.entries.find { it.name == json.optString("type", "BIRTHDAY") }
-                        ?: SpecialDateType.BIRTHDAY
-                )
-            } catch(e: Exception) {
-                Log.e("ChatParser", "Failed to parse date suggestion JSON", e)
-            }
-        }
-        
-        if (cleanText.contains("###REPEATING_TASK_SUGGESTION###")) {
-            val parts = cleanText.split("###REPEATING_TASK_SUGGESTION###")
-            cleanText = parts[0].trim()
-            try {
-                val json = JSONObject(parts[1].trim())
-                actionRepeatingTask = RepeatingTask(
-                    title = json.getString("title"),
-                    description = json.optString("description", ""),
-                    importance = json.optInt("importance", 5).coerceIn(1, 10),
-                    urgency = json.optInt("urgency", 5).coerceIn(1, 10),
-                    recurrenceType = RecurrenceType.entries.find { it.name == json.optString("recurrenceType", "WEEKLY") } ?: RecurrenceType.WEEKLY,
-                    intervalValue = json.optInt("intervalValue", 1).coerceAtLeast(1),
-                    nextDueDate = System.currentTimeMillis() + (24L * 60 * 60 * 1000)
-                )
-            } catch(e: Exception) {
-                Log.e("ChatParser", "Failed to parse repeating task suggestion JSON", e)
-            }
-        }
-        
-        return ChatMessage(MessageSender.AI, cleanText, actionTask = actionTask, actionSpecialDate = actionSpecialDate, actionRepeatingTask = actionRepeatingTask)
     }
 
     // AI Profile Evolving logic (Queues action to ObservationLog for background dreaming).
@@ -1289,6 +1527,487 @@ For repeating/recurring tasks, append:
                     }
                 }
             }
+        }
+    }
+
+    fun toggleMessagePromotion(message: ChatMessage) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.updateChatMessagePromotion(message.id, !message.isPromoted)
+        }
+    }
+
+    fun clearAllChatHistory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.clearAllChatHistory()
+        }
+    }
+
+    fun updateUserAccent(accent: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val profile = repository.getUserProfile()
+            if (profile != null) {
+                repository.updateUserProfile(profile.copy(userAccent = accent))
+            }
+        }
+    }
+
+    fun addKnownSpeaker(name: String, accent: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val profile = repository.getUserProfile() ?: return@launch
+            try {
+                val arr = JSONArray(profile.knownSpeakersJson)
+                var exists = false
+                for (i in 0 until arr.length()) {
+                    if (arr.getJSONObject(i).getString("name").equals(name, ignoreCase = true)) {
+                        exists = true
+                        break
+                    }
+                }
+                if (!exists) {
+                    val obj = JSONObject().apply {
+                        put("name", name)
+                        put("accent", accent)
+                    }
+                    arr.put(obj)
+                    repository.updateUserProfile(profile.copy(knownSpeakersJson = arr.toString()))
+                }
+            } catch(e: Exception) {
+                Log.e("ViewModel", "Failed to add speaker", e)
+            }
+        }
+    }
+
+    fun refineTranscription(rawText: String, spokenLanguage: String, onResult: (String) -> Unit) {
+        _isChatLoading.value = true
+        _chatAttachmentStatus.value = "Refining transcription..."
+        viewModelScope.launch {
+            val profile = repository.getUserProfile()
+            val accent = profile?.userAccent ?: "South African Afrikaans"
+            
+            val speakersJson = profile?.knownSpeakersJson ?: "[]"
+            val speakersList = mutableListOf<String>()
+            try {
+                val arr = JSONArray(speakersJson)
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    speakersList.add("- ${obj.getString("name")} (Accent: ${obj.getString("accent")})")
+                }
+            } catch(e: Exception) {}
+            val speakersSection = if (speakersList.isNotEmpty()) {
+                "### KNOWN SPEAKERS ###\n" + speakersList.joinToString("\n")
+            } else {
+                ""
+            }
+
+            val cal = Calendar.getInstance()
+            val dateFormat = java.text.SimpleDateFormat("EEEE, dd MMMM yyyy", java.util.Locale.getDefault())
+            val todayStr = dateFormat.format(cal.time)
+
+            val activeTasksList = repository.getActiveTasks()
+            val upcomingDeadlines = activeTasksList
+                .filter { it.deadline != null }
+                .sortedBy { it.deadline }
+                .take(3)
+                .map { "- ${it.title}" }
+            val deadlineSection = if (upcomingDeadlines.isNotEmpty()) {
+                "### ACTIVE TASKS CONTEXT ###\n" + upcomingDeadlines.joinToString("\n")
+            } else {
+                ""
+            }
+
+            val prompt = """
+                You are a transcription refinement assistant for Jan (Accent: $accent).
+                The spoken language is $spokenLanguage.
+                $speakersSection
+                
+                $deadlineSection
+                
+                Today's Date: $todayStr
+                
+                Raw Speech Recognition output:
+                "$rawText"
+                
+                Refine this transcription to improve the quality:
+                1. Correct spelling of names and terms based on the context and accents (e.g., correct "An Sunette" to "Ansunet", "Ann Gelleek" to "Angelique", "testament" to "testament").
+                2. If multiple speakers are clearly speaking in the text, insert speaker labels (e.g., "Jan: ... \n Angelique: ...").
+                3. Maintain the original meaning. Do not summarize. Return ONLY the refined transcript.
+            """.trimIndent()
+
+            val refinedResult = withContext(Dispatchers.Default) {
+                parser.runRawInference(prompt)
+            } ?: rawText
+            
+            _isChatLoading.value = false
+            _chatAttachmentStatus.value = null
+            withContext(Dispatchers.Main) {
+                onResult(refinedResult)
+            }
+        }
+    }
+
+    fun transcribeAudioFile(audioUri: android.net.Uri, spokenLanguage: String, onResult: (String, String) -> Unit) {
+        _isChatLoading.value = true
+        _chatAttachmentStatus.value = "Resolving audio file..."
+        viewModelScope.launch {
+            var cloudApiKey: String? = null
+            try {
+                val context = getApplication<Application>().applicationContext
+                val attachedAudioPath = withContext(Dispatchers.IO) { getPathFromUri(context, audioUri) }
+                if (attachedAudioPath == null) {
+                    _aiErrorMsg.value = "Failed to resolve audio file path."
+                    return@launch
+                }
+                
+                _chatAttachmentStatus.value = "Decoding audio file..."
+                val savedAudioPath = withContext(Dispatchers.IO) { copyAttachmentToInternal(context, attachedAudioPath) }
+                
+                val profile = repository.getUserProfile()
+                val accent = profile?.userAccent ?: "South African Afrikaans"
+                val prompt = "Transcribe the spoken words in this audio recording. The language spoken is $spokenLanguage and the speaker has a $accent accent. Output only the transcription, do not summarize or add commentary."
+
+                profile?.let { prof ->
+                    try {
+                        val meta = JSONObject(prof.metadataJson)
+                        if (meta.has("gemini_api_key")) {
+                            cloudApiKey = meta.getString("gemini_api_key").trim()
+                        }
+                    } catch (e: Exception) {}
+                }
+
+                val transcriptResult = if (!cloudApiKey.isNullOrBlank()) {
+                    _chatAttachmentStatus.value = "Transcribing via Gemini Cloud..."
+                    val audioBytes = withContext(Dispatchers.IO) { File(savedAudioPath).readBytes() }
+                    val ext = savedAudioPath.substringAfterLast('.', "mp3").lowercase()
+                    val mimeType = when (ext) {
+                        "mp3" -> "audio/mp3"
+                        "m4a", "mp4" -> "audio/m4a"
+                        "wav" -> "audio/wav"
+                        "ogg" -> "audio/ogg"
+                        "aac" -> "audio/aac"
+                        else -> "audio/mp3"
+                    }
+                    runGeminiCloudInference(cloudApiKey!!, prompt, null, audioBytes, mimeType)
+                } else {
+                    _chatAttachmentStatus.value = "Decoding audio file..."
+                    val localPcmBytes = try {
+                        withContext(Dispatchers.IO) {
+                            com.example.prioritize.audio.AudioDecoder.decodeToPcm(savedAudioPath)
+                        }
+                    } catch(e: Exception) {
+                        throw IllegalStateException("Failed to decode/resample attached audio file.", e)
+                    }
+                    _chatAttachmentStatus.value = "Transcribing audio locally..."
+                    withContext(Dispatchers.Default) {
+                        parser.runMultimodalInference(prompt, null, localPcmBytes)
+                    }
+                } ?: "Could not transcribe audio."
+
+                _chatAttachmentStatus.value = "Refining transcription..."
+                refineTranscription(transcriptResult, spokenLanguage) { refined ->
+                    onResult(transcriptResult, refined)
+                }
+            } catch (e: Exception) {
+                Log.e("TaskViewModel", "Error transcribing audio file", e)
+                val errMsg = if (cloudApiKey.isNullOrBlank()) {
+                    "Local audio transcription failed: ${e.message ?: "Unsupported model/backend"}. Please switch to cloud mode by entering a Gemini API Key under 'Brain Settings' inside the settings sheet."
+                } else {
+                    "Audio transcription failed. Please make sure your Gemini API Key is correct under 'Brain Settings' in Settings."
+                }
+                _aiErrorMsg.value = errMsg
+            } finally {
+                _isChatLoading.value = false
+                _chatAttachmentStatus.value = null
+            }
+        }
+    }
+
+    fun updateSpokenLanguages(languages: List<String>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val profile = repository.getUserProfile() ?: return@launch
+            try {
+                val json = JSONObject(profile.metadataJson)
+                val arr = JSONArray()
+                languages.forEach { arr.put(it) }
+                json.put("spoken_languages", arr)
+                repository.updateUserProfile(profile.copy(metadataJson = json.toString()))
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Failed to update spoken languages", e)
+            }
+        }
+    }
+
+    fun compactConversation() {
+        viewModelScope.launch {
+            _isChatLoading.value = true
+            _chatAttachmentStatus.value = "Compacting context..."
+            try {
+                val profile = withContext(Dispatchers.IO) { repository.getUserProfile() } ?: return@launch
+                val allMsgs = withContext(Dispatchers.IO) { repository.chatMessagesFlow.first() }
+                
+                val historyToSummarize = allMsgs
+                    .filter { it.sender == "User" || it.sender == "AI" }
+                    .filter { !it.text.startsWith("♻️") && !it.text.startsWith("🔍") }
+                    .takeLast(15)
+                
+                if (historyToSummarize.isNotEmpty()) {
+                    var cloudApiKey: String? = null
+                    try {
+                        val meta = JSONObject(profile.metadataJson)
+                        if (meta.has("gemini_api_key")) {
+                            cloudApiKey = meta.getString("gemini_api_key").trim()
+                        }
+                    } catch (e: Exception) {}
+
+                    val previousSummary = try {
+                        val json = JSONObject(profile.metadataJson)
+                        if (json.has("compaction_summary")) json.getString("compaction_summary") else ""
+                    } catch (e: Exception) { "" }
+
+                    val historyText = historyToSummarize.joinToString("\n") { "${it.sender}: ${it.text}" }
+
+                    val summarizationPrompt = """
+                        You are a helpful AI assistant.
+                        Below is a summary of the conversation so far, followed by the latest messages.
+                        Write a brand new, updated summary of the conversation in 2 to 3 sentences.
+                        Focus on key decisions, task agreements, and personal contexts the user has shared.
+                        Do not add any meta-commentary, introductory text, or signatures. Only output the 2-3 sentence summary.
+                        
+                        Previous Summary:
+                        $previousSummary
+                        
+                        Latest Messages:
+                        $historyText
+                        
+                        Updated Summary:
+                    """.trimIndent()
+
+                    val summaryResult = if (!cloudApiKey.isNullOrBlank()) {
+                        runGeminiCloudInference(cloudApiKey, summarizationPrompt, null, null, "text/plain")
+                    } else {
+                        withContext(Dispatchers.Default) {
+                            parser.runRawInference(summarizationPrompt)
+                        }
+                    }
+
+                    val cleanSummary = summaryResult?.trim()?.removeSurrounding("\"")
+                    if (!cleanSummary.isNullOrBlank()) {
+                        Log.d("TaskViewModel", "New compaction summary generated: $cleanSummary")
+                        try {
+                            val json = JSONObject(profile.metadataJson)
+                            json.put("compaction_summary", cleanSummary)
+                            withContext(Dispatchers.IO) {
+                                repository.updateUserProfile(profile.copy(metadataJson = json.toString()))
+                            }
+                        } catch (e: Exception) {
+                            Log.e("TaskViewModel", "Failed to save compaction summary", e)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("TaskViewModel", "Error during compaction summarization", e)
+            } finally {
+                withContext(Dispatchers.Default) {
+                    com.example.prioritize.ai.Gemma4Parser.resetContextCounter()
+                }
+                withContext(Dispatchers.IO) {
+                    repository.insertChatMessage(
+                        ChatMessageEntity(
+                            sender = "AI",
+                            text = "♻️ *Conversation context compacted.* The second brain's memory cache has been cleared to prevent slowdowns and memory errors. The message history remains visible above, but the AI starts with a fresh context window.",
+                            timestamp = System.currentTimeMillis()
+                        )
+                    )
+                }
+                _isChatLoading.value = false
+                _chatAttachmentStatus.value = null
+            }
+        }
+    }
+
+    fun updateGeminiApiKey(key: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val profile = repository.getUserProfile() ?: return@launch
+            try {
+                val json = JSONObject(profile.metadataJson)
+                json.put("gemini_api_key", key)
+                repository.updateUserProfile(profile.copy(metadataJson = json.toString()))
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Failed to update API key", e)
+            }
+        }
+    }
+
+    private suspend fun runGeminiCloudInference(
+        apiKey: String,
+        prompt: String,
+        imageBitmap: android.graphics.Bitmap? = null,
+        audioBytes: ByteArray? = null,
+        audioMimeType: String = "audio/mp3"
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            val url = java.net.URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey")
+            val conn = url.openConnection() as java.net.HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            
+            val root = org.json.JSONObject()
+            val contentsArray = org.json.JSONArray()
+            val contentObj = org.json.JSONObject()
+            contentObj.put("role", "user")
+            
+            val partsArray = org.json.JSONArray()
+            
+            val textPart = org.json.JSONObject()
+            textPart.put("text", prompt)
+            partsArray.put(textPart)
+            
+            if (imageBitmap != null) {
+                val bos = java.io.ByteArrayOutputStream()
+                imageBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, bos)
+                val base64Image = android.util.Base64.encodeToString(bos.toByteArray(), android.util.Base64.NO_WRAP)
+                
+                val imagePart = org.json.JSONObject()
+                val inlineData = org.json.JSONObject()
+                inlineData.put("mimeType", "image/jpeg")
+                inlineData.put("data", base64Image)
+                imagePart.put("inlineData", inlineData)
+                partsArray.put(imagePart)
+            }
+            
+            if (audioBytes != null) {
+                val base64Audio = android.util.Base64.encodeToString(audioBytes, android.util.Base64.NO_WRAP)
+                val audioPart = org.json.JSONObject()
+                val inlineData = org.json.JSONObject()
+                inlineData.put("mimeType", audioMimeType)
+                inlineData.put("data", base64Audio)
+                audioPart.put("inlineData", inlineData)
+                partsArray.put(audioPart)
+            }
+            
+            contentObj.put("parts", partsArray)
+            contentsArray.put(contentObj)
+            root.put("contents", contentsArray)
+            
+            val requestBody = root.toString()
+            conn.outputStream.use { os ->
+                os.write(requestBody.toByteArray(Charsets.UTF_8))
+            }
+            
+            val responseCode = conn.responseCode
+            if (responseCode == 200) {
+                val responseText = conn.inputStream.bufferedReader().use { it.readText() }
+                val responseJson = org.json.JSONObject(responseText)
+                val candidates = responseJson.getJSONArray("candidates")
+                if (candidates.length() > 0) {
+                    val firstCandidate = candidates.getJSONObject(0)
+                    val content = firstCandidate.getJSONObject("content")
+                    val parts = content.getJSONArray("parts")
+                    if (parts.length() > 0) {
+                        return@withContext parts.getJSONObject(0).getString("text")
+                    }
+                }
+                null
+            } else {
+                val errorText = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+                Log.e("GeminiCloud", "Error response: $responseCode - $errorText")
+                throw IllegalStateException("Cloud API error: $responseCode")
+            }
+        } catch (e: Exception) {
+            Log.e("GeminiCloud", "Request failed", e)
+            throw e
+        }
+    }
+
+    fun restoreTask(task: Task) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.updateTask(task.copy(isDeleted = false, deletedAt = null))
+            evolveProfileOnEvent("User restored task: '${task.title}'.")
+        }
+    }
+
+    fun permanentlyDeleteTask(task: Task) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteTask(task)
+            repository.deleteSubTasksForTask(task.id)
+        }
+    }
+
+    fun emptyRecycleBin() {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.emptyRecycleBin()
+        }
+    }
+
+    private fun getPathFromUri(context: Context, uri: android.net.Uri): String? {
+        if (uri.scheme == "file") return uri.path
+        
+        try {
+            val contentResolver = context.contentResolver
+            var fileName = "temp_upload_${System.currentTimeMillis()}.bin"
+            
+            // Query for original file name and extension
+            val cursor = contentResolver.query(uri, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex != -1) {
+                        val displayName = it.getString(nameIndex)
+                        if (!displayName.isNullOrBlank()) {
+                            fileName = displayName
+                        }
+                    }
+                }
+            }
+            
+            val tempFile = File(context.cacheDir, "${System.currentTimeMillis()}_$fileName")
+            contentResolver.openInputStream(uri)?.use { input ->
+                tempFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            return tempFile.absolutePath
+        } catch (e: Exception) {
+            Log.e("TaskViewModel", "Failed to resolve path from URI: $uri", e)
+            return null
+        }
+    }
+
+    private fun renderPdfPageToBitmap(context: Context, pdfFilePath: String, pageIndex: Int = 0): android.graphics.Bitmap? {
+        var pdfRenderer: android.graphics.pdf.PdfRenderer? = null
+        var parcelFileDescriptor: android.os.ParcelFileDescriptor? = null
+        var page: android.graphics.pdf.PdfRenderer.Page? = null
+        try {
+            val file = File(pdfFilePath)
+            if (!file.exists()) return null
+            parcelFileDescriptor = android.os.ParcelFileDescriptor.open(file, android.os.ParcelFileDescriptor.MODE_READ_ONLY)
+            pdfRenderer = android.graphics.pdf.PdfRenderer(parcelFileDescriptor)
+            if (pdfRenderer.pageCount <= pageIndex) return null
+            page = pdfRenderer.openPage(pageIndex)
+            val maxWidth = 1200
+            val maxHeight = 1600
+            val aspectRatio = page.width.toFloat() / page.height.toFloat()
+            var width = page.width
+            var height = page.height
+            if (width > maxWidth || height > maxHeight) {
+                if (aspectRatio > 1) {
+                    width = maxWidth
+                    height = (maxWidth / aspectRatio).toInt()
+                } else {
+                    height = maxHeight
+                    width = (maxHeight * aspectRatio).toInt()
+                }
+            }
+            val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
+            page.render(bitmap, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            return bitmap
+        } catch (e: Exception) {
+            Log.e("TaskViewModel", "Failed to render PDF page to Bitmap", e)
+            return null
+        } finally {
+            try { page?.close() } catch (e: Exception) {}
+            try { pdfRenderer?.close() } catch (e: Exception) {}
+            try { parcelFileDescriptor?.close() } catch (e: Exception) {}
         }
     }
 

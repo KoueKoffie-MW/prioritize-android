@@ -2,18 +2,24 @@ package com.example.prioritize.data
 
 import kotlinx.coroutines.flow.Flow
 
-class TaskRepository(private val taskDao: TaskDao) {
+class TaskRepository(
+    private val taskDao: TaskDao,
+    private val chatMessageDao: ChatMessageDao
+) {
     val activeTasksFlow: Flow<List<Task>> = taskDao.getActiveTasksFlow()
     val scratchPadTasksFlow: Flow<List<Task>> = taskDao.getScratchPadTasksFlow()
     val completedTasksFlow: Flow<List<Task>> = taskDao.getCompletedTasksFlow()
+    val deletedTasksFlow: Flow<List<Task>> = taskDao.getDeletedTasksFlow()
 
     suspend fun getTaskById(taskId: Long): Task? = taskDao.getTaskById(taskId)
+    suspend fun getActiveTasksForRepeatingTask(repeatingTaskId: Long): List<Task> = taskDao.getActiveTasksForRepeatingTask(repeatingTaskId)
     suspend fun getActiveTasks(): List<Task> = taskDao.getActiveTasks()
 
     suspend fun insertTask(task: Task): Long = taskDao.insertTask(task)
     suspend fun updateTask(task: Task) = taskDao.updateTask(task)
     suspend fun deleteTask(task: Task) = taskDao.deleteTask(task)
     suspend fun deleteAllCompletedTasks() = taskDao.deleteAllCompletedTasks()
+    suspend fun emptyRecycleBin() = taskDao.emptyRecycleBin()
 
     // Sub-tasks
     fun getSubTasksFlow(taskId: Long): Flow<List<SubTask>> = taskDao.getSubTasksFlow(taskId)
@@ -57,4 +63,10 @@ class TaskRepository(private val taskDao: TaskDao) {
     suspend fun insertObservationLog(log: ObservationLog): Long = taskDao.insertObservationLog(log)
     suspend fun markLogsAsProcessed(ids: List<Long>) = taskDao.markLogsAsProcessed(ids)
     suspend fun deleteProcessedLogs() = taskDao.deleteProcessedLogs()
+
+    // Chat History
+    val chatMessagesFlow: Flow<List<ChatMessageEntity>> = chatMessageDao.getAllMessagesFlow()
+    suspend fun insertChatMessage(msg: ChatMessageEntity): Long = chatMessageDao.insertMessage(msg)
+    suspend fun updateChatMessagePromotion(id: Long, promoted: Boolean) = chatMessageDao.updateMessagePromotion(id, promoted)
+    suspend fun clearAllChatHistory() = chatMessageDao.clearAllMessages()
 }

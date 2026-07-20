@@ -7,6 +7,7 @@ interface TaskParser {
     suspend fun parseSubTasksFromResponse(pastedText: String): List<ParsedSubTaskSuggestion>
     suspend fun generateSubTasksLocally(taskTitle: String): List<ParsedSubTaskSuggestion>
     suspend fun runRawInference(prompt: String): String?
+    suspend fun runMultimodalInference(prompt: String, imageBitmap: android.graphics.Bitmap?, audioBytes: ByteArray?): String?
 }
 
 data class ParsedTaskSuggestion(

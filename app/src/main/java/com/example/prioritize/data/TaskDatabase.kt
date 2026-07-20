@@ -10,13 +10,14 @@ import androidx.room.TypeConverters
 // This is required for safe migration testing. Configure the output directory in build.gradle.kts:
 //   ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 @Database(
-    entities = [Task::class, SubTask::class, UserProfile::class, RepeatingTask::class, SpecialDate::class, MemoryProfile::class, ObservationLog::class],
-    version = 5,
+    entities = [Task::class, SubTask::class, UserProfile::class, RepeatingTask::class, SpecialDate::class, MemoryProfile::class, ObservationLog::class, ChatMessageEntity::class],
+    version = 9,
     exportSchema = true
 )
 @TypeConverters(AppTypeConverters::class)
 abstract class TaskDatabase : RoomDatabase() {
     abstract fun taskDao(): TaskDao
+    abstract fun chatMessageDao(): ChatMessageDao
 
     companion object {
         @Volatile
@@ -33,7 +34,15 @@ abstract class TaskDatabase : RoomDatabase() {
                 // to prevent silent data loss on schema changes. See Migrations.kt for details.
                 // When upgrading the database version, always add a new Migration object in Migrations.kt
                 // and register it here BEFORE removing the old migration for backward compatibility.
-                .addMigrations(Migrations.MIGRATION_2_3, Migrations.MIGRATION_3_4, Migrations.MIGRATION_4_5)
+                .addMigrations(
+                    Migrations.MIGRATION_2_3,
+                    Migrations.MIGRATION_3_4,
+                    Migrations.MIGRATION_4_5,
+                    Migrations.MIGRATION_5_6,
+                    Migrations.MIGRATION_6_7,
+                    Migrations.MIGRATION_7_8,
+                    Migrations.MIGRATION_8_9
+                )
                 .build()
                 INSTANCE = instance
                 instance

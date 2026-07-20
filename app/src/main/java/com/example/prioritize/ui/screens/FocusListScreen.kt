@@ -51,10 +51,12 @@ fun FocusListScreen(
 ) {
     val activeTasks by viewModel.activeTasks.collectAsState()
     val completedTasks by viewModel.completedTasks.collectAsState()
+    val deletedTasks by viewModel.deletedTasks.collectAsState()
     val subTasksMap by viewModel.subTasksMap.collectAsState()
 
     var activeTaskForEdit by remember { mutableStateOf<Task?>(null) }
     var showCompleted by remember { mutableStateOf(false) }
+    var showDeleted by remember { mutableStateOf(false) }
     var sortByDeadline by remember { mutableStateOf(false) }
 
     val isModelAvailable by viewModel.isModelAvailable.collectAsState()
@@ -404,6 +406,119 @@ fun FocusListScreen(
                                     onEditClick = { activeTaskForEdit = task },
                                     onBreakdownClick = { onBreakdownClick(task) }
                                 )
+                            }
+                        }
+                    }
+                }
+
+                // ── Recycle Bin section ──────────────────────────────────
+                if (deletedTasks.isNotEmpty()) {
+                    item {
+                        HorizontalDivider(color = DIVIDER, modifier = Modifier.padding(vertical = 12.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { showDeleted = !showDeleted }
+                                .background(ACCENT_RED.copy(alpha = 0.07f))
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(ACCENT_RED.copy(alpha = 0.15f))
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = "RECYCLE BIN",
+                                        color = ACCENT_RED,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 10.sp,
+                                        letterSpacing = 1.5.sp
+                                    )
+                                }
+                                Text(
+                                    text = "  ${deletedTasks.size} task${if (deletedTasks.size == 1) "" else "s"}",
+                                    color = TEXT_SECONDARY,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Text(
+                                text = if (showDeleted) "▲ Hide" else "▼ Show",
+                                color = ACCENT_RED,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    if (showDeleted) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp, bottom = 4.dp),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                TextButton(
+                                    onClick = { viewModel.emptyRecycleBin() },
+                                    colors = ButtonDefaults.textButtonColors(
+                                        contentColor = Color(0xFFCF6679)
+                                    )
+                                ) {
+                                    Text(
+                                        text = "💥 Empty Recycle Bin",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+
+                        items(deletedTasks, key = { "bin_${it.id}" }) { task ->
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = BG.copy(alpha = 0.4f)),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, DIVIDER),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = task.title,
+                                            color = TEXT_PRIMARY,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        if (task.description.isNotEmpty()) {
+                                            Text(
+                                                text = task.description,
+                                                color = TEXT_SECONDARY,
+                                                fontSize = 12.sp,
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        IconButton(onClick = { viewModel.restoreTask(task) }) {
+                                            Text("↩️", fontSize = 16.sp)
+                                        }
+                                        IconButton(onClick = { viewModel.permanentlyDeleteTask(task) }) {
+                                            Text("🗑️", fontSize = 16.sp)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

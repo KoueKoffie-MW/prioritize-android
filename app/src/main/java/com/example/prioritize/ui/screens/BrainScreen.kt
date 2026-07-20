@@ -1,6 +1,7 @@
 package com.example.prioritize.ui.screens
 
 import android.widget.Toast
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -18,7 +19,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
+import android.net.Uri
+import com.example.prioritize.ui.components.TranscriptionReviewDialog
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -40,6 +44,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 
+enum class LanguageSelectorType { RECORDING, UPLOAD }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BrainScreen(viewModel: TaskViewModel) {
@@ -55,7 +61,9 @@ fun BrainScreen(viewModel: TaskViewModel) {
     val userProfile by viewModel.userProfile.collectAsState()
     val chatMessages by viewModel.chatMessages.collectAsState()
     val isChatLoading by viewModel.isChatLoading.collectAsState()
+    val chatAttachmentStatus by viewModel.chatAttachmentStatus.collectAsState()
     val onboardingPhase by viewModel.onboardingPhase.collectAsState()
+    val userAccent by viewModel.userAccent.collectAsState()
 
     val isModelAvailable by viewModel.isModelAvailable.collectAsState()
     val isDownloading by viewModel.isDownloading.collectAsState()
@@ -64,8 +72,86 @@ fun BrainScreen(viewModel: TaskViewModel) {
     val activeModelSpec by viewModel.activeModelSpec.collectAsState()
     val isImporting by viewModel.isImporting.collectAsState()
     val importProgress by viewModel.importProgress.collectAsState()
+    val contextFillRatio by viewModel.contextFillRatio.collectAsState()
+    val attachedDocUri by viewModel.attachedDocUri.collectAsState()
+    val attachedDocName by viewModel.attachedDocName.collectAsState()
 
     var chatInput by remember { mutableStateOf("") }
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedAudioUri by remember { mutableStateOf<Uri?>(null) }
+    
+    // Transcription review states
+    var showReviewDialog by remember { mutableStateOf(false) }
+    var rawTranscriptText by remember { mutableStateOf("") }
+    var refinedTranscriptText by remember { mutableStateOf("") }
+    
+    // Speech recording state
+    var isRecordingSpeech by remember { mutableStateOf(false) }
+    var partialTranscriptText by remember { mutableStateOf("") }
+
+    val spokenLanguages = remember(userProfile) {
+        val defaultLangs = listOf("English", "Afrikaans", "German")
+        userProfile?.let { profile ->
+            try {
+                val json = org.json.JSONObject(profile.metadataJson)
+                if (json.has("spoken_languages")) {
+                    val arr = json.getJSONArray("spoken_languages")
+                    val list = mutableListOf<String>()
+                    for (i in 0 until arr.length()) {
+                        list.add(arr.getString(i))
+                    }
+                    if (list.isNotEmpty()) list else defaultLangs
+                } else defaultLangs
+            } catch (e: Exception) { defaultLangs }
+        } ?: defaultLangs
+    }
+    
+    var showLanguageSelectorFor by remember { mutableStateOf<LanguageSelectorType?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            com.example.prioritize.audio.SpeechTranscriber.cancel()
+        }
+    }
+
+    // Pick image launcher
+    val imagePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        selectedImageUri = uri
+    }
+    
+    // Pick audio launcher
+    val audioPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        selectedAudioUri = uri
+    }
+
+    // Pick document launcher
+    val docPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            val name = try {
+                var displayName = "document"
+                context.contentResolver.query(it, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (nameIndex != -1) {
+                            val disp = cursor.getString(nameIndex)
+                            if (!disp.isNullOrBlank()) {
+                                displayName = disp
+                            }
+                        }
+                    }
+                }
+                displayName
+            } catch (e: Exception) { "document" }
+            viewModel.setAttachedDoc(it, name)
+        }
+    }
+
     val chatListState = rememberLazyListState()
 
     var showEditPromptDialog by remember { mutableStateOf(false) }
@@ -79,6 +165,7 @@ fun BrainScreen(viewModel: TaskViewModel) {
     // GitHub auth state
     val isGitHubLoggedIn by viewModel.isGitHubLoggedIn.collectAsState()
     val isGitHubLoggingIn by viewModel.isGitHubLoggingIn.collectAsState()
+    val gitHubUserCode by viewModel.gitHubUserCode.collectAsState()
     val feedbackSubmitState by viewModel.feedbackSubmitState.collectAsState()
 
     val aiErrorMsg by viewModel.aiErrorMsg.collectAsState()
@@ -238,6 +325,80 @@ fun BrainScreen(viewModel: TaskViewModel) {
 
         HorizontalDivider(color = Color(0xFF28283C), thickness = 1.dp)
 
+        AnimatedVisibility(visible = contextFillRatio > 0.01f) {
+            Surface(
+                color = Color(0xFF151522),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "Second Brain Context Usage",
+                                color = Color.White.copy(alpha = 0.7f),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            val pct = (contextFillRatio * 100).toInt()
+                            Text(
+                                text = "$pct%",
+                                color = when {
+                                    contextFillRatio > 0.90f -> Color(0xFFCF6679)
+                                    contextFillRatio > 0.75f -> Color(0xFFFFB74D)
+                                    else -> Color(0xFF03DAC6)
+                                },
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { contextFillRatio },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp)),
+                            color = when {
+                                contextFillRatio > 0.90f -> Color(0xFFCF6679)
+                                contextFillRatio > 0.75f -> Color(0xFFFFB74D)
+                                else -> Color(0xFF03DAC6)
+                            },
+                            trackColor = Color(0xFF28283C)
+                        )
+                    }
+                    if (contextFillRatio > 0.75f) {
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Button(
+                            onClick = { viewModel.compactConversation() },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (contextFillRatio > 0.90f) Color(0xFFCF6679) else Color(0xFFFFB74D),
+                                contentColor = Color.Black
+                            ),
+                            shape = RoundedCornerShape(4.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Text(
+                                text = "Compact",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // MESSAGES AREA (weight=1f compresses cleanly when keyboard appears)
         Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp)) {
             if (!isModelAvailable) {
@@ -297,10 +458,128 @@ fun BrainScreen(viewModel: TaskViewModel) {
 
         HorizontalDivider(color = Color(0xFF28283C), thickness = 1.dp)
 
+        // ATTACHMENT PREVIEW ROW
+        if (selectedImageUri != null || selectedAudioUri != null || attachedDocUri != null || isRecordingSpeech) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .background(Color(0xFF1E1E2C), RoundedCornerShape(8.dp))
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (selectedImageUri != null) {
+                    val bitmap = remember(selectedImageUri) {
+                        try {
+                            context.contentResolver.openInputStream(selectedImageUri!!)?.use {
+                                android.graphics.BitmapFactory.decodeStream(it)?.asImageBitmap()
+                            }
+                        } catch(e: Exception) { null }
+                    }
+                    if (bitmap != null) {
+                        androidx.compose.foundation.Image(
+                            bitmap = bitmap,
+                            contentDescription = "Preview Image",
+                            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp))
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text("Photo Attached", color = Color.White, modifier = Modifier.weight(1f), fontSize = 12.sp)
+                    IconButton(onClick = { selectedImageUri = null }) {
+                        Text("×", color = Color.Red, fontSize = 20.sp)
+                    }
+                }
+                if (selectedAudioUri != null) {
+                    Text("🎵 Audio file attached", color = Color.White, modifier = Modifier.weight(1f), fontSize = 12.sp)
+                    IconButton(onClick = { selectedAudioUri = null }) {
+                        Text("×", color = Color.Red, fontSize = 20.sp)
+                    }
+                }
+                if (attachedDocUri != null) {
+                    val isPdf = attachedDocName?.endsWith(".pdf", ignoreCase = true) == true
+                    Text(
+                        text = if (isPdf) "📄 $attachedDocName" else "📝 $attachedDocName",
+                        color = Color.White,
+                        modifier = Modifier.weight(1f),
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                    IconButton(onClick = { viewModel.setAttachedDoc(null, null) }) {
+                        Text("×", color = Color.Red, fontSize = 20.sp)
+                    }
+                }
+                if (isRecordingSpeech) {
+                    CircularProgressIndicator(color = Color(0xFF03DAC6), modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = if (partialTranscriptText.isNotBlank()) partialTranscriptText else "Hearing...",
+                        color = Color(0xFF03DAC6),
+                        modifier = Modifier.weight(1f),
+                        fontSize = 12.sp
+                    )
+                    Button(
+                        onClick = {
+                            isRecordingSpeech = false
+                            com.example.prioritize.audio.SpeechTranscriber.stopListening()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red, contentColor = Color.White)
+                    ) {
+                        Text("Stop")
+                    }
+                }
+            }
+        }
+
         // INPUT ROW
         if (isModelAvailable) {
             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically) {
+                
+                IconButton(onClick = {
+                    imagePicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                }, modifier = Modifier.size(36.dp)) {
+                    Text("📷", fontSize = 18.sp, color = Color.White)
+                }
+
+                IconButton(onClick = {
+                    audioPicker.launch("audio/*")
+                }, modifier = Modifier.size(36.dp)) {
+                    Text("🎵", fontSize = 18.sp, color = Color.White)
+                }
+
+                IconButton(onClick = {
+                    docPicker.launch(arrayOf("application/pdf", "text/plain"))
+                }, modifier = Modifier.size(36.dp)) {
+                    Text("📄", fontSize = 18.sp, color = Color.White)
+                }
+
+                IconButton(
+                    onClick = {
+                        if (isRecordingSpeech) {
+                            isRecordingSpeech = false
+                            partialTranscriptText = ""
+                            com.example.prioritize.audio.SpeechTranscriber.stopListening()
+                        } else {
+                            val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                                context,
+                                android.Manifest.permission.RECORD_AUDIO
+                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                            
+                            if (hasPermission) {
+                                showLanguageSelectorFor = LanguageSelectorType.RECORDING
+                            } else {
+                                Toast.makeText(context, "Microphone permission is required for voice notes", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Text(if (isRecordingSpeech) "🛑" else "🎙️", fontSize = 18.sp, color = Color.White)
+                }
+
+                Spacer(Modifier.width(4.dp))
+
                 OutlinedTextField(value = chatInput, onValueChange = { chatInput = it },
                     placeholder = { Text("Brainstorm task ideas...") },
                     colors = OutlinedTextFieldDefaults.colors(
@@ -309,12 +588,106 @@ fun BrainScreen(viewModel: TaskViewModel) {
                     modifier = Modifier.weight(1f))
                 Spacer(Modifier.width(8.dp))
                 Button(onClick = {
-                        if (chatInput.isNotBlank()) { viewModel.sendMessageToBrain(chatInput); chatInput = "" }
+                        if (selectedAudioUri != null) {
+                            showLanguageSelectorFor = LanguageSelectorType.UPLOAD
+                        } else if (chatInput.isNotBlank() || selectedImageUri != null || attachedDocUri != null) {
+                            viewModel.sendMessageToBrain(chatInput, selectedImageUri, null, attachedDocUri)
+                            chatInput = ""
+                            selectedImageUri = null
+                            viewModel.setAttachedDoc(null, null)
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF03DAC6), contentColor = Color.Black),
                     modifier = Modifier.height(56.dp)) { Text("Send") }
             }
         }
+    }
+
+    if (showReviewDialog) {
+        TranscriptionReviewDialog(
+            rawText = rawTranscriptText,
+            refinedText = refinedTranscriptText,
+            viewModel = viewModel,
+            onDismiss = { showReviewDialog = false },
+            onConfirm = { editedText ->
+                showReviewDialog = false
+                viewModel.sendMessageToBrain(editedText, selectedImageUri, null, attachedDocUri)
+                selectedImageUri = null
+                selectedAudioUri = null
+                viewModel.setAttachedDoc(null, null)
+            }
+        )
+    }
+
+    if (showLanguageSelectorFor != null) {
+        AlertDialog(
+            onDismissRequest = { showLanguageSelectorFor = null },
+            title = { Text("Select Spoken Language", color = Color.White) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Which language did you speak in this recording?", color = Color.Gray, fontSize = 13.sp)
+                    spokenLanguages.forEach { language ->
+                        Button(
+                            onClick = {
+                                val targetType = showLanguageSelectorFor
+                                showLanguageSelectorFor = null
+                                if (targetType == LanguageSelectorType.RECORDING) {
+                                    isRecordingSpeech = true
+                                    partialTranscriptText = ""
+                                    val langCode = when (language.trim().lowercase()) {
+                                        "afrikaans" -> "af-ZA"
+                                        "german", "deutsch" -> "de-DE"
+                                        else -> "en-US"
+                                    }
+                                    com.example.prioritize.audio.SpeechTranscriber.startListening(
+                                        context = context,
+                                        languageCode = langCode,
+                                        continuous = true,
+                                        onPartialResult = { text ->
+                                            partialTranscriptText = text
+                                        },
+                                        onFinalResult = { text ->
+                                            isRecordingSpeech = false
+                                            partialTranscriptText = ""
+                                            if (text.isNotBlank()) {
+                                                rawTranscriptText = text
+                                                viewModel.refineTranscription(text, language) { refined ->
+                                                    refinedTranscriptText = refined
+                                                    showReviewDialog = true
+                                                }
+                                            }
+                                        },
+                                        onError = { err ->
+                                            isRecordingSpeech = false
+                                            partialTranscriptText = ""
+                                            Toast.makeText(context, "Speech Error: $err", Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
+                                } else if (targetType == LanguageSelectorType.UPLOAD) {
+                                    viewModel.transcribeAudioFile(selectedAudioUri!!, language) { raw, refined ->
+                                        rawTranscriptText = raw
+                                        refinedTranscriptText = refined
+                                        showReviewDialog = true
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF28283C), contentColor = Color.White),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(language)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showLanguageSelectorFor = null }) {
+                    Text("Cancel", color = Color(0xFFCF6679))
+                }
+            },
+            containerColor = Color(0xFF151522),
+            textContentColor = Color.White
+        )
     }
 
     // SETTINGS BOTTOM SHEET
@@ -376,6 +749,92 @@ fun BrainScreen(viewModel: TaskViewModel) {
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF28283C), contentColor = Color.White),
                     modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
                     Text(if (onboardingPhase > 0) "Restart Interview" else "Start Onboarding Interview")
+                }
+
+                Text("Voice & Accents", color = Color.LightGray, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E2C)),
+                    shape = RoundedCornerShape(8.dp)) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        OutlinedTextField(
+                            value = userAccent,
+                            onValueChange = { viewModel.updateUserAccent(it) },
+                            label = { Text("Your Accent / Pronunciation context", color = Color.LightGray) },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                                focusedBorderColor = Color(0xFF03DAC6)
+                            )
+                        )
+                        
+                        var languagesText by remember(userProfile) {
+                            val defaultLangs = "English, Afrikaans, German"
+                            val current = userProfile?.let {
+                                try {
+                                    val json = org.json.JSONObject(it.metadataJson)
+                                    if (json.has("spoken_languages")) {
+                                        val arr = json.getJSONArray("spoken_languages")
+                                        val list = mutableListOf<String>()
+                                        for (i in 0 until arr.length()) {
+                                            list.add(arr.getString(i))
+                                        }
+                                        list.joinToString(", ")
+                                    } else defaultLangs
+                                } catch (e: Exception) { defaultLangs }
+                            } ?: defaultLangs
+                            mutableStateOf(current)
+                        }
+
+                        OutlinedTextField(
+                            value = languagesText,
+                            onValueChange = { newVal ->
+                                languagesText = newVal
+                                val list = newVal.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                                viewModel.updateSpokenLanguages(list)
+                            },
+                            label = { Text("Spoken Languages (comma-separated)", color = Color.LightGray) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                                focusedBorderColor = Color(0xFF03DAC6)
+                            )
+                        )
+                    }
+                }
+
+                Text("Cloud API Settings (Optional)", color = Color.LightGray, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E2C)),
+                    shape = RoundedCornerShape(8.dp)) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        var apiKeyText by remember(userProfile) {
+                            val current = userProfile?.let {
+                                try {
+                                    val json = org.json.JSONObject(it.metadataJson)
+                                    if (json.has("gemini_api_key")) {
+                                        json.getString("gemini_api_key")
+                                    } else ""
+                                } catch (e: Exception) { "" }
+                            } ?: ""
+                            mutableStateOf(current)
+                        }
+
+                        OutlinedTextField(
+                            value = apiKeyText,
+                            onValueChange = { newVal ->
+                                apiKeyText = newVal
+                                viewModel.updateGeminiApiKey(newVal)
+                            },
+                            label = { Text("Gemini API Key (for Image & Audio)", color = Color.LightGray) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                                focusedBorderColor = Color(0xFF03DAC6)
+                            )
+                        )
+                    }
                 }
 
                 HorizontalDivider(color = Color(0xFF28283C), modifier = Modifier.padding(bottom = 16.dp))
@@ -708,7 +1167,51 @@ fun ChatMessageBubble(
                 .background(bubbleColor)
                 .padding(12.dp)
         ) {
-            Text(text = message.text, color = textColor, fontSize = 13.sp)
+            Column {
+                if (message.imagePath != null) {
+                    val bitmap = remember(message.imagePath) {
+                        try {
+                            android.graphics.BitmapFactory.decodeFile(message.imagePath)?.asImageBitmap()
+                        } catch (e: Exception) { null }
+                    }
+                    if (bitmap != null) {
+                        androidx.compose.foundation.Image(
+                            bitmap = bitmap,
+                            contentDescription = "Chat Image Attachment",
+                            modifier = Modifier
+                                .padding(bottom = 6.dp)
+                                .widthIn(max = 240.dp)
+                                .heightIn(max = 240.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                        )
+                    }
+                }
+                if (message.text.isNotEmpty()) {
+                    Text(text = message.text, color = textColor, fontSize = 13.sp)
+                } else if (message.imagePath != null) {
+                    Text(
+                        text = "Photo Attachment",
+                        color = textColor.copy(alpha = 0.5f),
+                        fontSize = 11.sp,
+                        style = androidx.compose.ui.text.TextStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                    )
+                }
+            }
+        }
+
+        if (message.audioPath != null) {
+            AudioPlayerWidget(audioPath = message.audioPath)
+        }
+
+        if (message.documentPath != null) {
+            val docName = message.documentPath.substringAfterLast('_').substringAfterLast('/')
+            val isPdf = docName.endsWith(".pdf", ignoreCase = true)
+            Text(
+                text = if (isPdf) "📄 Attached PDF: $docName" else "📝 Attached Text: $docName",
+                color = Color.LightGray.copy(alpha = 0.6f),
+                fontSize = 10.sp,
+                modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp)
+            )
         }
 
         // Action chips
@@ -909,5 +1412,67 @@ fun FeedbackDialog(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun AudioPlayerWidget(audioPath: String) {
+    var isPlaying by remember { mutableStateOf(false) }
+    var player by remember { mutableStateOf<android.media.MediaPlayer?>(null) }
+    val context = LocalContext.current
+
+    DisposableEffect(audioPath) {
+        onDispose {
+            player?.stop()
+            player?.release()
+            player = null
+        }
+    }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .padding(top = 4.dp)
+            .background(Color(0xFF28283C), RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    ) {
+        IconButton(
+            onClick = {
+                if (isPlaying) {
+                    player?.pause()
+                    isPlaying = false
+                } else {
+                    val mp = player ?: android.media.MediaPlayer().apply {
+                        try {
+                            setDataSource(audioPath)
+                            prepare()
+                            setOnCompletionListener {
+                                isPlaying = false
+                            }
+                        } catch (e: Exception) {
+                            Log.e("AudioPlayerWidget", "Error preparing media player for path: $audioPath", e)
+                            Toast.makeText(context, "Error playing audio file", Toast.LENGTH_SHORT).show()
+                        }
+                    }.also { player = it }
+                    
+                    try {
+                        mp.start()
+                        isPlaying = true
+                    } catch (e: Exception) {
+                        Log.e("AudioPlayerWidget", "Error starting media player", e)
+                    }
+                }
+            },
+            modifier = Modifier.size(28.dp)
+        ) {
+            Text(if (isPlaying) "⏸️" else "▶️", fontSize = 14.sp, color = Color.White)
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = "Voice Note Attachment",
+            color = Color.White,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
