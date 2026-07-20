@@ -545,46 +545,83 @@ fun BrainScreen(viewModel: TaskViewModel) {
             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 
-                IconButton(onClick = {
-                    imagePicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                }, modifier = Modifier.size(36.dp)) {
-                    Text("📷", fontSize = 18.sp, color = Color.White)
-                }
+                var showAttachmentMenu by remember { mutableStateOf(false) }
 
-                IconButton(onClick = {
-                    audioPicker.launch("audio/*")
-                }, modifier = Modifier.size(36.dp)) {
-                    Text("🎵", fontSize = 18.sp, color = Color.White)
-                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(end = 4.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(if (showAttachmentMenu) Color(0xFF03DAC6) else Color(0xFF28283C))
+                            .clickable { showAttachmentMenu = !showAttachmentMenu },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (showAttachmentMenu) "×" else "+",
+                            color = if (showAttachmentMenu) Color.Black else Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
 
-                IconButton(onClick = {
-                    docPicker.launch(arrayOf("application/pdf", "text/plain"))
-                }, modifier = Modifier.size(36.dp)) {
-                    Text("📄", fontSize = 18.sp, color = Color.White)
-                }
-
-                IconButton(
-                    onClick = {
-                        if (isRecordingSpeech) {
-                            isRecordingSpeech = false
-                            partialTranscriptText = ""
-                            com.example.prioritize.audio.SpeechTranscriber.stopListening()
-                        } else {
-                            val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
-                                context,
-                                android.Manifest.permission.RECORD_AUDIO
-                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = showAttachmentMenu,
+                        enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.expandHorizontally(),
+                        exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkHorizontally()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Spacer(Modifier.width(4.dp))
                             
-                            if (hasPermission) {
-                                showLanguageSelectorFor = LanguageSelectorType.RECORDING
-                            } else {
-                                Toast.makeText(context, "Microphone permission is required for voice notes", Toast.LENGTH_LONG).show()
+                            IconButton(onClick = {
+                                showAttachmentMenu = false
+                                imagePicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            }, modifier = Modifier.size(36.dp)) {
+                                Text("📷", fontSize = 18.sp, color = Color.White)
+                            }
+
+                            IconButton(onClick = {
+                                showAttachmentMenu = false
+                                audioPicker.launch("audio/*")
+                            }, modifier = Modifier.size(36.dp)) {
+                                Text("🎵", fontSize = 18.sp, color = Color.White)
+                            }
+
+                            IconButton(onClick = {
+                                showAttachmentMenu = false
+                                docPicker.launch(arrayOf("application/pdf", "text/plain"))
+                            }, modifier = Modifier.size(36.dp)) {
+                                Text("📄", fontSize = 18.sp, color = Color.White)
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    showAttachmentMenu = false
+                                    if (isRecordingSpeech) {
+                                        isRecordingSpeech = false
+                                        partialTranscriptText = ""
+                                        com.example.prioritize.audio.SpeechTranscriber.stopListening()
+                                    } else {
+                                        val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                                            context,
+                                            android.Manifest.permission.RECORD_AUDIO
+                                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                        
+                                        if (hasPermission) {
+                                            showLanguageSelectorFor = LanguageSelectorType.RECORDING
+                                        } else {
+                                            Toast.makeText(context, "Microphone permission is required for voice notes", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Text(if (isRecordingSpeech) "🛑" else "🎙️", fontSize = 18.sp, color = Color.White)
                             }
                         }
-                    },
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Text(if (isRecordingSpeech) "🛑" else "🎙️", fontSize = 18.sp, color = Color.White)
+                    }
                 }
 
                 Spacer(Modifier.width(4.dp))
@@ -900,6 +937,77 @@ fun BrainScreen(viewModel: TaskViewModel) {
                                 }
                             }
                         }
+                    }
+                }
+
+                // ── Sampler Configuration ─────────────────────────────────────
+                Text("Inference Parameters", color = Color.LightGray, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E2C)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        val tempVal by viewModel.temperature.collectAsState()
+                        val topKVal by viewModel.topK.collectAsState()
+                        val topPVal by viewModel.topP.collectAsState()
+
+                        // Temperature
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Temperature: ${"%.2f".format(tempVal)}", color = Color.White, fontSize = 12.sp)
+                        }
+                        Slider(
+                            value = tempVal,
+                            onValueChange = { viewModel.updateSamplingParameters(it, topKVal, topPVal) },
+                            valueRange = 0.1f..2.0f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFF03DAC6),
+                                activeTrackColor = Color(0xFF03DAC6)
+                            )
+                        )
+                        Spacer(Modifier.height(8.dp))
+
+                        // Top K
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Top K: $topKVal", color = Color.White, fontSize = 12.sp)
+                        }
+                        Slider(
+                            value = topKVal.toFloat(),
+                            onValueChange = { viewModel.updateSamplingParameters(tempVal, it.toInt(), topPVal) },
+                            valueRange = 1f..128f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFF03DAC6),
+                                activeTrackColor = Color(0xFF03DAC6)
+                            )
+                        )
+                        Spacer(Modifier.height(8.dp))
+
+                        // Top P
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Top P: ${"%.2f".format(topPVal)}", color = Color.White, fontSize = 12.sp)
+                        }
+                        Slider(
+                            value = topPVal,
+                            onValueChange = { viewModel.updateSamplingParameters(tempVal, topKVal, it) },
+                            valueRange = 0.1f..1.0f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFF03DAC6),
+                                activeTrackColor = Color(0xFF03DAC6)
+                            )
+                        )
                     }
                 }
 

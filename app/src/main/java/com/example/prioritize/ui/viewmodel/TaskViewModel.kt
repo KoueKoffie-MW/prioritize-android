@@ -284,6 +284,34 @@ class TaskViewModel(
     private val _aiErrorMsg = MutableStateFlow<String?>(null)
     val aiErrorMsg: StateFlow<String?> = _aiErrorMsg.asStateFlow()
 
+    // Dynamic Sampler configuration settings
+    private val prefs = getApplication<Application>().getSharedPreferences("prioritize_settings", Context.MODE_PRIVATE)
+
+    private val _temperature = MutableStateFlow(prefs.getFloat("temperature", 1.0f))
+    val temperature: StateFlow<Float> = _temperature.asStateFlow()
+
+    private val _topK = MutableStateFlow(prefs.getInt("topK", 64))
+    val topK: StateFlow<Int> = _topK.asStateFlow()
+
+    private val _topP = MutableStateFlow(prefs.getFloat("topP", 0.95f))
+    val topP: StateFlow<Float> = _topP.asStateFlow()
+
+    fun updateSamplingParameters(temp: Float, k: Int, p: Float) {
+        _temperature.value = temp
+        _topK.value = k
+        _topP.value = p
+        prefs.edit().apply {
+            putFloat("temperature", temp)
+            putInt("topK", k)
+            putFloat("topP", p)
+            apply()
+        }
+        com.example.prioritize.ai.Gemma4Parser.temperature = temp.toDouble()
+        com.example.prioritize.ai.Gemma4Parser.topK = k
+        com.example.prioritize.ai.Gemma4Parser.topP = p.toDouble()
+        Log.d("Settings", "Updated sampling params: temp=$temp, topK=$k, topP=$p")
+    }
+
     fun clearAiError() {
         _aiErrorMsg.value = null
     }
@@ -307,6 +335,10 @@ class TaskViewModel(
     val activeModelSpec: StateFlow<EdgeModelSpec> = _activeModelSpec.asStateFlow()
 
     init {
+        com.example.prioritize.ai.Gemma4Parser.temperature = _temperature.value.toDouble()
+        com.example.prioritize.ai.Gemma4Parser.topK = _topK.value
+        com.example.prioritize.ai.Gemma4Parser.topP = _topP.value.toDouble()
+
         // Schedule periodic background Dreaming consolidation worker via WorkManager
         val constraints = Constraints.Builder()
             .setRequiresCharging(true)

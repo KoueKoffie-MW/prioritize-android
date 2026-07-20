@@ -47,6 +47,15 @@ class Gemma4Parser(private val context: Context) : TaskParser {
         var lastNpuError: String? = null
         var lastGpuError: String? = null
 
+        @Volatile
+        var temperature: Double = 1.0
+
+        @Volatile
+        var topK: Int = 64
+
+        @Volatile
+        var topP: Double = 0.95
+
         private val _contextFillRatio = MutableStateFlow(0f)
         val contextFillRatio: StateFlow<Float> = _contextFillRatio.asStateFlow()
 
@@ -293,17 +302,17 @@ class Gemma4Parser(private val context: Context) : TaskParser {
                         })),
                         automaticToolCalling = true,
                         samplerConfig = if (activeBackend == "NPU") null else SamplerConfig(
-                            topK = 64,
-                            topP = 0.95,
-                            temperature = 1.0
+                            topK = topK,
+                            topP = topP,
+                            temperature = temperature
                         )
                     )
                 } else {
                     ConversationConfig(
                         samplerConfig = if (activeBackend == "NPU") null else SamplerConfig(
-                            topK = 64,
-                            topP = 0.95,
-                            temperature = 1.0
+                            topK = topK,
+                            topP = topP,
+                            temperature = temperature
                         )
                     )
                 }
@@ -485,17 +494,17 @@ class Gemma4Parser(private val context: Context) : TaskParser {
                                 })),
                                 automaticToolCalling = true,
                                 samplerConfig = if (activeBackend == "NPU") null else SamplerConfig(
-                                    topK = 64,
-                                    topP = 0.95,
-                                    temperature = 1.0
+                                    topK = topK,
+                                    topP = topP,
+                                    temperature = temperature
                                 )
                             )
                         } else {
                             ConversationConfig(
                                 samplerConfig = if (activeBackend == "NPU") null else SamplerConfig(
-                                    topK = 64,
-                                    topP = 0.95,
-                                    temperature = 1.0
+                                    topK = topK,
+                                    topP = topP,
+                                    temperature = temperature
                                 )
                             )
                         }
