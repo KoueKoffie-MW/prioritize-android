@@ -9,6 +9,7 @@ import com.example.prioritize.data.MemoryProfile
 import com.example.prioritize.data.ObservationLog
 import com.example.prioritize.data.TaskDatabase
 import com.example.prioritize.data.TaskRepository
+import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -37,8 +38,14 @@ class DreamingWorker(
         // Chunk observations in groups of 5 to protect LLM context length and prevent memory failures
         val chunkSize = 5
         val chunks = unprocessedLogs.chunked(chunkSize)
+        val processedIds = mutableListOf<Long>()
 
         for (chunk in chunks) {
+            if (isStopped) {
+                Log.i("DreamingWorker", "Consolidation cancelled. Exiting loop.")
+                break
+            }
+
             val observationsText = chunk.joinToString("\n") { "- ${it.description}" }
             val prompt = """
                 You are a memory consolidation engine (Dreaming phase).
@@ -70,65 +77,74 @@ class DreamingWorker(
                 if (startIndex != -1 && endIndex != -1 && endIndex > startIndex) {
                     val jsonStr = response.substring(startIndex, endIndex + 1)
                     val jsonArray = JSONArray(jsonStr)
-                    for (i in 0 until jsonArray.length()) {
-                        val obj = jsonArray.getJSONObject(i)
-                        val key = obj.getString("key").trim().lowercase()
-                        val title = obj.getString("title").trim()
-                        val keywords = obj.getString("keywords").trim()
-                        val newFactsArr = obj.getJSONArray("new_facts")
 
-                        val existing = repository.getMemoryProfileByKey(key)
-                        val mergedFacts = mutableListOf<String>()
-                        if (existing != null) {
-                            try {
-                                val currentArr = JSONArray(existing.factsJson)
-                                for (j in 0 until currentArr.length()) {
-                                    mergedFacts.add(currentArr.getString(j))
+                    // Execute updates for this chunk inside a Room transaction
+                    database.withTransaction {
+                        for (i in 0 until jsonArray.length()) {
+                            val obj = jsonArray.getJSONObject(i)
+                            val key = obj.optString("key", "").trim().lowercase()
+                            if (key.isEmpty()) continue
+
+                            val title = obj.optString("title", "").trim().ifEmpty { key }
+                            val keywords = obj.optString("keywords", "").trim()
+                            val newFactsArr = obj.optJSONArray("new_facts")
+
+                            val existing = repository.getMemoryProfileByKey(key)
+                            val mergedFacts = mutableListOf<String>()
+                            if (existing != null) {
+                                try {
+                                    val currentArr = JSONArray(existing.factsJson)
+                                    for (j in 0 until currentArr.length()) {
+                                        mergedFacts.add(currentArr.getString(j))
+                                    }
+                                } catch (e: Exception) {
+                                    Log.w("DreamingWorker", "Failed to parse existing factsJson for key='$key': ${e.message}")
                                 }
-                            } catch (e: Exception) {
-                                // Log instead of silently swallowing — factsJson may be malformed
-                                Log.w("DreamingWorker", "Failed to parse existing factsJson for key='$key': ${e.message}")
                             }
-                        }
 
-                        for (j in 0 until newFactsArr.length()) {
-                            val fact = newFactsArr.getString(j).trim()
-                            if (fact.isNotEmpty() && !mergedFacts.any { it.equals(fact, ignoreCase = true) }) {
-                                mergedFacts.add(fact)
+                            if (newFactsArr != null) {
+                                for (j in 0 until newFactsArr.length()) {
+                                    val fact = newFactsArr.optString(j, "").trim()
+                                    if (fact.isNotEmpty() && !mergedFacts.any { it.equals(fact, ignoreCase = true) }) {
+                                        mergedFacts.add(fact)
+                                    }
+                                }
                             }
+
+                            // Merge keywords as a deduplicated set
+                            val mergedKeywords: String = buildSet {
+                                existing?.keywordsCsv?.split(",")?.forEach { add(it.trim()) }
+                                keywords.split(",").forEach { add(it.trim()) }
+                            }.filter { it.isNotEmpty() }.joinToString(",")
+
+                            val factsJsonStr = JSONArray(mergedFacts).toString()
+                            val profileToSave = MemoryProfile(
+                                id = existing?.id ?: 0,
+                                key = key,
+                                title = title,
+                                keywordsCsv = mergedKeywords,
+                                factsJson = factsJsonStr,
+                                lastUpdated = System.currentTimeMillis()
+                            )
+                            repository.insertMemoryProfile(profileToSave)
+                            Log.d("DreamingWorker", "Consolidated facts for: $key")
                         }
-
-                        // Merge keywords as a deduplicated set to prevent unbounded CSV growth
-                        // across repeated Dreaming cycles.
-                        val mergedKeywords: String = buildSet {
-                            existing?.keywordsCsv?.split(",")?.forEach { add(it.trim()) }
-                            keywords.split(",").forEach { add(it.trim()) }
-                        }.filter { it.isNotEmpty() }.joinToString(",")
-
-                        val factsJsonStr = JSONArray(mergedFacts).toString()
-                        val profileToSave = MemoryProfile(
-                            id = existing?.id ?: 0,
-                            key = key,
-                            title = title,
-                            keywordsCsv = mergedKeywords,
-                            factsJson = factsJsonStr,
-                            lastUpdated = System.currentTimeMillis()
-                        )
-                        repository.insertMemoryProfile(profileToSave)
-                        Log.d("DreamingWorker", "Consolidated facts for: $key")
                     }
+                    // Accumulate IDs only on successful transaction commits
+                    processedIds.addAll(chunk.map { it.id })
                 }
             } catch (e: Exception) {
                 Log.e("DreamingWorker", "Failed to parse chunk consolidation JSON response: $response", e)
             }
         }
 
-        // Mark all processed log entries as completed
-        val processedIds = unprocessedLogs.map { it.id }
-        repository.markLogsAsProcessed(processedIds)
-        repository.deleteProcessedLogs() // Keep database lean
+        // Clean up only the logs that were successfully processed
+        if (processedIds.isNotEmpty()) {
+            repository.markLogsAsProcessed(processedIds)
+            repository.deleteProcessedLogs()
+        }
 
-        Log.i("DreamingWorker", "Dreaming consolidation completed successfully.")
+        Log.i("DreamingWorker", "Dreaming consolidation completed. Processed ${processedIds.size}/${unprocessedLogs.size} logs.")
         Result.success()
     }
 }
