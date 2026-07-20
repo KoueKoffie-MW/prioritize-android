@@ -56,7 +56,7 @@ object SpeechTranscriber {
             currentIntent = intent
 
             try {
-                val newRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
+                val newRecognizer = SpeechRecognizer.createSpeechRecognizer(context.applicationContext)
                 newRecognizer.setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
                         Log.d(TAG, "onReadyForSpeech")

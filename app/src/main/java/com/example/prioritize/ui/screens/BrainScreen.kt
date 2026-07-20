@@ -35,6 +35,8 @@ import com.example.prioritize.ui.viewmodel.AVAILABLE_MODELS
 import com.example.prioritize.ui.viewmodel.EdgeModelSpec
 import com.example.prioritize.ui.viewmodel.DeviceHardware
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
@@ -69,6 +71,7 @@ fun BrainScreen(viewModel: TaskViewModel) {
     val isDownloading by viewModel.isDownloading.collectAsState()
     val downloadProgress by viewModel.downloadProgress.collectAsState()
     val downloadedModels by viewModel.downloadedModels.collectAsState()
+    val isInitialModelCheckComplete by viewModel.isInitialModelCheckComplete.collectAsState()
     val activeModelSpec by viewModel.activeModelSpec.collectAsState()
     val isImporting by viewModel.isImporting.collectAsState()
     val importProgress by viewModel.importProgress.collectAsState()
@@ -184,8 +187,10 @@ fun BrainScreen(viewModel: TaskViewModel) {
         }
     }
 
-    LaunchedEffect(downloadedModels) {
-        if (downloadedModels.isEmpty()) showSettingsSheet = true
+    LaunchedEffect(downloadedModels, isInitialModelCheckComplete) {
+        if (isInitialModelCheckComplete && downloadedModels.isEmpty()) {
+            showSettingsSheet = true
+        }
     }
 
     val exportLauncher = rememberLauncherForActivityResult(
@@ -441,7 +446,7 @@ fun BrainScreen(viewModel: TaskViewModel) {
                 LazyColumn(state = chatListState, modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(vertical = 8.dp)) {
-                    items(chatMessages, key = { "${it.sender}_${it.timestamp}" }) { message ->
+                    items(chatMessages, key = { it.id }) { message ->
                         ChatMessageBubble(message = message, viewModel = viewModel)
                     }
                     if (isChatLoading) {
@@ -469,16 +474,20 @@ fun BrainScreen(viewModel: TaskViewModel) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (selectedImageUri != null) {
-                    val bitmap = remember(selectedImageUri) {
-                        try {
-                            context.contentResolver.openInputStream(selectedImageUri!!)?.use {
-                                android.graphics.BitmapFactory.decodeStream(it)?.asImageBitmap()
-                            }
-                        } catch(e: Exception) { null }
+                    var bitmap by remember(selectedImageUri) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+                    LaunchedEffect(selectedImageUri) {
+                        val loaded = withContext(Dispatchers.IO) {
+                            try {
+                                context.contentResolver.openInputStream(selectedImageUri!!)?.use {
+                                    android.graphics.BitmapFactory.decodeStream(it)?.asImageBitmap()
+                                }
+                            } catch (e: Exception) { null }
+                        }
+                        bitmap = loaded
                     }
                     if (bitmap != null) {
                         androidx.compose.foundation.Image(
-                            bitmap = bitmap,
+                            bitmap = bitmap!!,
                             contentDescription = "Preview Image",
                             modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp))
                         )
@@ -1169,14 +1178,18 @@ fun ChatMessageBubble(
         ) {
             Column {
                 if (message.imagePath != null) {
-                    val bitmap = remember(message.imagePath) {
-                        try {
-                            android.graphics.BitmapFactory.decodeFile(message.imagePath)?.asImageBitmap()
-                        } catch (e: Exception) { null }
+                    var bitmap by remember(message.imagePath) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+                    LaunchedEffect(message.imagePath) {
+                        val loaded = withContext(Dispatchers.IO) {
+                            try {
+                                android.graphics.BitmapFactory.decodeFile(message.imagePath)?.asImageBitmap()
+                            } catch (e: Exception) { null }
+                        }
+                        bitmap = loaded
                     }
                     if (bitmap != null) {
                         androidx.compose.foundation.Image(
-                            bitmap = bitmap,
+                            bitmap = bitmap!!,
                             contentDescription = "Chat Image Attachment",
                             modifier = Modifier
                                 .padding(bottom = 6.dp)

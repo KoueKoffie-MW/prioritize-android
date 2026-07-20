@@ -29,6 +29,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.isActive
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -293,9 +294,12 @@ class TaskViewModel(
     private val _importProgress = MutableStateFlow(0)
     val importProgress: StateFlow<Int> = _importProgress.asStateFlow()
 
-    // Dynamic model management flows
+    private val _isInitialModelCheckComplete = MutableStateFlow(false)
+    val isInitialModelCheckComplete: StateFlow<Boolean> = _isInitialModelCheckComplete.asStateFlow()
+
     private val _downloadedModels = MutableStateFlow<Set<String>>(emptySet())
     val downloadedModels: StateFlow<Set<String>> = _downloadedModels.asStateFlow()
+
 
     private val _activeModelSpec = MutableStateFlow(
         AVAILABLE_MODELS.firstOrNull { it.id == DEFAULT_MODEL_ID } ?: AVAILABLE_MODELS[0]
@@ -425,6 +429,7 @@ class TaskViewModel(
         // Update active availability status
         val currentSpec = _activeModelSpec.value
         _isModelAvailable.value = downloaded.contains(currentSpec.id)
+        _isInitialModelCheckComplete.value = true
     }
 
     // Delete a downloaded model file from device storage to reclaim space
@@ -681,6 +686,8 @@ class TaskViewModel(
         _isDownloading.value = true
         _downloadProgress.value = 0
 
+        var downloadId: Long? = null
+
         viewModelScope.launch(Dispatchers.IO) {
             // Retrieve HF Token from UserProfile metadata if present
             val profile = repository.getUserProfile()
@@ -704,14 +711,14 @@ class TaskViewModel(
                     setDescription("Downloading on-device intelligence...")
                     setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                     setDestinationInExternalFilesDir(context, null, spec.filename)
-                    // Note: We do NOT append hfToken here, because S3 signed URL has authorization embedded in query.
                 }
 
-                val downloadId = downloadManager.enqueue(request)
+                val id = downloadManager.enqueue(request)
+                downloadId = id
 
                 var downloading = true
                 while (downloading) {
-                    val query = android.app.DownloadManager.Query().setFilterById(downloadId)
+                    val query = android.app.DownloadManager.Query().setFilterById(id)
                     val cursor = downloadManager.query(query)
                     if (cursor != null && cursor.moveToFirst()) {
                         val statusIdx = cursor.getColumnIndex(android.app.DownloadManager.COLUMN_STATUS)
@@ -729,27 +736,28 @@ class TaskViewModel(
 
                         if (status == android.app.DownloadManager.STATUS_SUCCESSFUL) {
                             downloading = false
-                            _isDownloading.value = false
                             withContext(Dispatchers.Main) {
                                 refreshDownloadedModels()
                             }
                         } else if (status == android.app.DownloadManager.STATUS_FAILED) {
                             downloading = false
-                            _isDownloading.value = false
                             val reasonIdx = cursor.getColumnIndex(android.app.DownloadManager.COLUMN_REASON)
                             val reason = if (reasonIdx >= 0) cursor.getInt(reasonIdx) else -1
                             Log.e("Downloader", "Download failed. Reason code: $reason")
                         }
                     } else {
                         downloading = false
-                        _isDownloading.value = false
                     }
                     cursor?.close()
                     kotlinx.coroutines.delay(1000)
                 }
             } catch (e: Exception) {
                 Log.e("Downloader", "Failed to start download of model: ${spec.id}", e)
+            } finally {
                 _isDownloading.value = false
+                if (!kotlin.coroutines.coroutineContext.isActive) {
+                    downloadId?.let { downloadManager.remove(it) }
+                }
             }
         }
     }
@@ -1130,7 +1138,9 @@ class TaskViewModel(
                     val isTextFile = ext == "txt" || ext == "md" || ext == "log" || ext == "json" || ext == "csv"
                     if (isTextFile) {
                         try {
-                            val fileContent = File(path).readText()
+                            val fileContent = withContext(Dispatchers.IO) {
+                                File(path).readText()
+                            }
                             val filename = File(path).name.substringAfter('_')
                             docPromptText = "\n\n### ATTACHED FILE: $filename ###\n```text\n$fileContent\n```\n"
                             Log.d("TaskViewModel", "Injected text file attachment: $filename, size=${fileContent.length}")
@@ -1139,13 +1149,17 @@ class TaskViewModel(
                         }
                     } else if (isPdf && cloudApiKey.isNullOrBlank()) {
                         // Local mode PDF: render page 1 to bitmap
-                        pdfBitmapForLocalMultimodal = renderPdfPageToBitmap(context, path, 0)
+                        pdfBitmapForLocalMultimodal = withContext(Dispatchers.Default) {
+                            renderPdfPageToBitmap(context, path, 0)
+                        }
                         Log.d("TaskViewModel", "Rendered PDF first page as image bitmap for local OCR")
                     }
                 }
 
                 // 3. Keyword Scan RAG memory profiles
-                val allProfiles = repository.getMemoryProfiles()
+                val allProfiles = withContext(Dispatchers.IO) {
+                    repository.getMemoryProfiles()
+                }
                 val matchedFacts = mutableListOf<String>()
                 allProfiles.forEach { mp ->
                     val aliases = mp.keywordsCsv.split(",").map { it.trim().lowercase() }
@@ -1169,7 +1183,9 @@ class TaskViewModel(
                 val dateFormat = java.text.SimpleDateFormat("EEEE, dd MMMM yyyy", java.util.Locale.getDefault())
                 val todayStr = dateFormat.format(cal.time)
 
-                val activeTasksList = repository.getActiveTasks()
+                val activeTasksList = withContext(Dispatchers.IO) {
+                    repository.getActiveTasks()
+                }
                 val upcomingDeadlines = activeTasksList
                     .filter { it.deadline != null }
                     .sortedBy { it.deadline }
