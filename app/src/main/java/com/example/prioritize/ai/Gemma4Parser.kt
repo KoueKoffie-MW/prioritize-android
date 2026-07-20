@@ -59,7 +59,7 @@ class Gemma4Parser(private val context: Context) : TaskParser {
         val isEngineNull: Boolean
             get() = engine == null
 
-        fun resetContextCounter() {
+        private fun resetContextCounterInternal() {
             accumulatedTokens = 0
             _contextFillRatio.value = 0f
             try {
@@ -70,40 +70,46 @@ class Gemma4Parser(private val context: Context) : TaskParser {
             activeConversation = null
             Log.d(TAG, "Context counter reset and active conversation closed.")
         }
-    }
 
-    fun closeEngine() {
-        companionObjectReset()
-        try {
-            engine?.close()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error closing engine", e)
+        suspend fun resetContextCounter() {
+            inferenceMutex.withLock {
+                resetContextCounterInternal()
+            }
         }
-        engine = null
-        isInitialized = false
-        lastNpuError = null
-        lastGpuError = null
-        Log.d(TAG, "Engine closed manually.")
     }
 
-    private fun companionObjectReset() {
-        resetContextCounter()
-    }
-
-    fun changeModel(filename: String) {
-        if (activeModelFilename != filename) {
-            activeModelFilename = filename
-            companionObjectReset()
+    suspend fun closeEngine() {
+        inferenceMutex.withLock {
+            resetContextCounterInternal()
             try {
                 engine?.close()
             } catch (e: Exception) {
-                Log.e(TAG, "Error closing engine during model change", e)
+                Log.e(TAG, "Error closing engine", e)
             }
             engine = null
             isInitialized = false
             lastNpuError = null
             lastGpuError = null
-            Log.d(TAG, "Active model changed to: $filename. Engine reset.")
+            Log.d(TAG, "Engine closed manually.")
+        }
+    }
+
+    suspend fun changeModel(filename: String) {
+        inferenceMutex.withLock {
+            if (activeModelFilename != filename) {
+                activeModelFilename = filename
+                resetContextCounterInternal()
+                try {
+                    engine?.close()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error closing engine during model change", e)
+                }
+                engine = null
+                isInitialized = false
+                lastNpuError = null
+                lastGpuError = null
+                Log.d(TAG, "Active model changed to: $filename. Engine reset.")
+            }
         }
     }
 
@@ -262,12 +268,21 @@ class Gemma4Parser(private val context: Context) : TaskParser {
             runInferenceInternal(prompt)
         }
     }
-
     private suspend fun runInferenceInternal(prompt: String): String? = withContext(Dispatchers.Default) {
         if (!initializeEngine()) return@withContext null
         val currentEngine = engine ?: return@withContext null
         try {
             var fullResponse = ""
+            
+            // Guard: If adding this prompt will exceed 90% of context capacity, proactively reset
+            val modelSpec = AVAILABLE_MODELS.find { it.filename == activeModelFilename }
+            val limit = modelSpec?.contextTokens ?: 8192
+            val estimatedPromptTokens = prompt.length / 4
+            if (accumulatedTokens + estimatedPromptTokens > limit * 0.9) {
+                Log.w(TAG, "Approaching context limit: accumulated=$accumulatedTokens, prompt=$estimatedPromptTokens, limit=$limit. Proactively resetting conversation.")
+                resetContextCounterInternal()
+            }
+
             // Warm KV-cache reuse conversation
             val conversation = activeConversation ?: run {
                 val modelSpec = AVAILABLE_MODELS.find { it.filename == activeModelFilename }
@@ -322,13 +337,13 @@ class Gemma4Parser(private val context: Context) : TaskParser {
             Log.d(TAG, "Inference result: '${fullResponse.take(200)}'")
 
             // Estimate tokens: characters / 4
-            val modelSpec = AVAILABLE_MODELS.find { it.filename == activeModelFilename }
-            val limit = modelSpec?.contextTokens ?: 8192
+            val finalModelSpec = AVAILABLE_MODELS.find { it.filename == activeModelFilename }
+            val finalLimit = finalModelSpec?.contextTokens ?: 8192
             val promptTokens = prompt.length / 4
             val responseTokens = fullResponse.length / 4
             accumulatedTokens += promptTokens + responseTokens
-            _contextFillRatio.value = (accumulatedTokens.toFloat() / limit).coerceAtMost(1f)
-            Log.d(TAG, "Context usage updated: $accumulatedTokens / $limit (${_contextFillRatio.value * 100}%)")
+            _contextFillRatio.value = (accumulatedTokens.toFloat() / finalLimit).coerceAtMost(1f)
+            Log.d(TAG, "Context usage updated: $accumulatedTokens / $finalLimit (${_contextFillRatio.value * 100}%)")
 
             fullResponse
         } catch (t: Throwable) {
@@ -336,7 +351,7 @@ class Gemma4Parser(private val context: Context) : TaskParser {
             if (t is OutOfMemoryError || t.message?.contains("OutOfMemory", ignoreCase = true) == true) {
                 Log.e(TAG, "CRITICAL: OutOfMemoryError caught during inference! Resetting conversation context.")
             }
-            resetContextCounter()
+            resetContextCounterInternal()
             null
         }
     }
@@ -448,9 +463,22 @@ class Gemma4Parser(private val context: Context) : TaskParser {
                 val currentEngine = engine ?: return@withContext null
                 try {
                     var fullResponse = ""
+
+                    // Guard: If adding this prompt + media will exceed 90% of context capacity, proactively reset
+                    val modelSpec = AVAILABLE_MODELS.find { it.filename == activeModelFilename }
+                    val limit = modelSpec?.contextTokens ?: 8192
+                    val estimatedPromptTokens = prompt.length / 4
+                    val imageOverhead = if (image != null) 1024 else 0
+                    val audioOverhead = if (audio != null) (audio.size / 32000) * 100 else 0
+                    val estimatedTotalNewTokens = estimatedPromptTokens + imageOverhead + audioOverhead
+                    if (accumulatedTokens + estimatedTotalNewTokens > limit * 0.9) {
+                        Log.w(TAG, "Approaching context limit in multimodal: accumulated=$accumulatedTokens, new=$estimatedTotalNewTokens, limit=$limit. Proactively resetting conversation.")
+                        resetContextCounterInternal()
+                    }
+
                     val conversation = activeConversation ?: run {
-                        val modelSpec = AVAILABLE_MODELS.find { it.filename == activeModelFilename }
-                        val config = if (modelSpec?.supportsTools == true) {
+                        val innerModelSpec = AVAILABLE_MODELS.find { it.filename == activeModelFilename }
+                        val config = if (innerModelSpec?.supportsTools == true) {
                             ConversationConfig(
                                 tools = listOf(tool(PrioritizeTools { action ->
                                     actionListener?.invoke(action)
@@ -501,15 +529,15 @@ class Gemma4Parser(private val context: Context) : TaskParser {
                     }
 
                     // Estimate tokens: prompt, response + image/audio overhead
-                    val modelSpec = AVAILABLE_MODELS.find { it.filename == activeModelFilename }
-                    val limit = modelSpec?.contextTokens ?: 8192
+                    val finalModelSpec = AVAILABLE_MODELS.find { it.filename == activeModelFilename }
+                    val finalLimit = finalModelSpec?.contextTokens ?: 8192
                     val promptTokens = prompt.length / 4
                     val responseTokens = fullResponse.length / 4
-                    val imageOverhead = if (image != null) 1024 else 0
-                    val audioOverhead = if (audio != null) (audio.size / 32000) * 100 else 0
-                    accumulatedTokens += promptTokens + responseTokens + imageOverhead + audioOverhead
-                    _contextFillRatio.value = (accumulatedTokens.toFloat() / limit).coerceAtMost(1f)
-                    Log.d(TAG, "Multimodal Context usage updated: $accumulatedTokens / $limit (${_contextFillRatio.value * 100}%)")
+                    val finalImageOverhead = if (image != null) 1024 else 0
+                    val finalAudioOverhead = if (audio != null) (audio.size / 32000) * 100 else 0
+                    accumulatedTokens += promptTokens + responseTokens + finalImageOverhead + finalAudioOverhead
+                    _contextFillRatio.value = (accumulatedTokens.toFloat() / finalLimit).coerceAtMost(1f)
+                    Log.d(TAG, "Multimodal Context usage updated: $accumulatedTokens / $finalLimit (${_contextFillRatio.value * 100}%)")
 
                     fullResponse
                 } catch (t: Throwable) {
@@ -517,7 +545,7 @@ class Gemma4Parser(private val context: Context) : TaskParser {
                     if (t is OutOfMemoryError || t.message?.contains("OutOfMemory", ignoreCase = true) == true) {
                         Log.e(TAG, "CRITICAL: OutOfMemoryError caught during multimodal inference! Resetting conversation context.")
                     }
-                    resetContextCounter()
+                    resetContextCounterInternal()
                     
                     if (image != null || audio != null) {
                         throw Exception("Multimodal inference failed: ${t.message ?: "OOM/Native Error"}", t)
