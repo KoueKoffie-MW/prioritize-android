@@ -22,7 +22,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.prioritize.ai.Gemma4Parser
+import com.example.prioritize.ai.ParsedTaskSuggestion
 import com.example.prioritize.ui.components.ConfirmTaskDialog
+import com.example.prioritize.data.Task
 import com.example.prioritize.ui.viewmodel.TaskViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -35,6 +37,7 @@ fun ScratchPadScreen(
     val scratchPadTasks by viewModel.scratchPadTasks.collectAsState()
     val isAILoading by viewModel.isAILoading.collectAsState()
     val aiSuggestion by viewModel.aiSuggestion.collectAsState()
+    var manualEditTask by remember { mutableStateOf<Task?>(null) }
 
     val context = LocalContext.current
     val isModelAvailable by viewModel.isModelAvailable.collectAsState()
@@ -219,6 +222,20 @@ fun ScratchPadScreen(
                             )
                         }
                         Spacer(Modifier.width(6.dp))
+                        // Manual edit/promote button
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF2A2A3E))
+                                .clickable { manualEditTask = task }
+                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = "✏️",
+                                fontSize = 13.sp
+                            )
+                        }
+                        Spacer(Modifier.width(6.dp))
                         // Explicit delete icon — dismiss without processing
                         Box(
                             modifier = Modifier
@@ -252,6 +269,34 @@ fun ScratchPadScreen(
                 },
                 onDismiss = {
                     viewModel.clearSuggestion()
+                }
+            )
+        }
+
+        manualEditTask?.let { task ->
+            val manualSuggestion = ParsedTaskSuggestion(
+                title = task.title,
+                description = task.description ?: "",
+                importance = 5,
+                urgency = 5,
+                estimatedMinutes = 30,
+                deadline = task.deadline,
+                recurrenceType = null
+            )
+            ConfirmTaskDialog(
+                suggestion = manualSuggestion,
+                onConfirm = { finalTask ->
+                    viewModel.saveTask(finalTask)
+                    viewModel.deleteTask(task) // Remove from scratchpad
+                    manualEditTask = null
+                },
+                onConfirmRepeating = { finalRepTask ->
+                    viewModel.saveRepeatingTask(finalRepTask)
+                    viewModel.deleteTask(task) // Remove from scratchpad
+                    manualEditTask = null
+                },
+                onDismiss = {
+                    manualEditTask = null
                 }
             )
         }

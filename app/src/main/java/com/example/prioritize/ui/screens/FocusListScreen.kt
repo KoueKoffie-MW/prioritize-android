@@ -31,6 +31,8 @@ import com.example.prioritize.ui.components.SwipeableTaskCard
 import com.example.prioritize.ui.components.TaskCard
 import com.example.prioritize.ui.components.TaskDetailDialog
 import com.example.prioritize.ui.viewmodel.TaskViewModel
+import com.example.prioritize.data.RepeatingTask
+import com.example.prioritize.ui.components.AddRepeatingTaskDialog
 
 // Hardcoded dark palette — consistent with all other screens in the app
 private val BG = Color(0xFF0D0D1A)
@@ -53,8 +55,10 @@ fun FocusListScreen(
     val completedTasks by viewModel.completedTasks.collectAsState()
     val deletedTasks by viewModel.deletedTasks.collectAsState()
     val subTasksMap by viewModel.subTasksMap.collectAsState()
+    val repeatingTasks by viewModel.repeatingTasks.collectAsState()
 
     var activeTaskForEdit by remember { mutableStateOf<Task?>(null) }
+    var editingRepeatingTask by remember { mutableStateOf<RepeatingTask?>(null) }
     var showCompleted by remember { mutableStateOf(false) }
     var showDeleted by remember { mutableStateOf(false) }
     var sortByDeadline by remember { mutableStateOf(false) }
@@ -531,9 +535,11 @@ fun FocusListScreen(
         // Premium Edit Task Dialog (Task Detail Screen - Option C)
         activeTaskForEdit?.let { task ->
             val subTasks = subTasksMap[task.id] ?: emptyList()
+            val parentRepeatingTask = repeatingTasks.find { it.id == task.repeatingTaskId }
             TaskDetailDialog(
                 task = task,
                 initialSubTasks = subTasks,
+                parentRepeatingTask = parentRepeatingTask,
                 onSave = { updatedTask, updatedSubTasks ->
                     val finalTask = updatedTask.copy(
                         id = task.id,
@@ -547,7 +553,26 @@ fun FocusListScreen(
                     viewModel.deleteTask(task)
                     activeTaskForEdit = null
                 },
-                onDismiss = { activeTaskForEdit = null }
+                onDismiss = { activeTaskForEdit = null },
+                onEditRepeatingTemplate = {
+                    editingRepeatingTask = parentRepeatingTask
+                    activeTaskForEdit = null
+                }
+            )
+        }
+
+        editingRepeatingTask?.let { rt ->
+            AddRepeatingTaskDialog(
+                existingRepeatingTask = rt,
+                onDismiss = { editingRepeatingTask = null },
+                onSave = { updated ->
+                    viewModel.updateRepeatingTask(updated)
+                    editingRepeatingTask = null
+                },
+                onDelete = {
+                    viewModel.deleteRepeatingTask(rt)
+                    editingRepeatingTask = null
+                }
             )
         }
     }

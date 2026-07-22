@@ -11,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.prioritize.data.SubTask
 import com.example.prioritize.data.Task
+import com.example.prioritize.data.RepeatingTask
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.roundToInt
@@ -36,9 +38,11 @@ import kotlin.math.roundToInt
 fun TaskDetailDialog(
     task: Task,
     initialSubTasks: List<SubTask>,
+    parentRepeatingTask: RepeatingTask? = null,
     onSave: (Task, List<SubTask>) -> Unit,
     onDelete: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onEditRepeatingTemplate: (() -> Unit)? = null
 ) {
     var title by remember { mutableStateOf(task.title) }
     var description by remember { mutableStateOf(task.description) }
@@ -127,6 +131,30 @@ fun TaskDetailDialog(
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 12.sp
                         )
+                    }
+                }
+
+                parentRepeatingTask?.let { rt ->
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E2C)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onEditRepeatingTemplate?.invoke() }
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("🔁 Repeating Task Instance", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("Click to edit the repeating template cadence", color = Color.Gray, fontSize = 11.sp)
+                            }
+                            Icon(Icons.Filled.Edit, contentDescription = "Edit Template", tint = Color(0xFF03DAC6), modifier = Modifier.size(16.dp))
+                        }
                     }
                 }
 
