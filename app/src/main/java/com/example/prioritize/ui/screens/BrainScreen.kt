@@ -34,6 +34,8 @@ import com.example.prioritize.ui.viewmodel.TaskViewModel
 import com.example.prioritize.ui.viewmodel.AVAILABLE_MODELS
 import com.example.prioritize.ui.viewmodel.EdgeModelSpec
 import com.example.prioritize.ui.viewmodel.DeviceHardware
+import com.example.prioritize.data.RepeatingTask
+import com.example.prioritize.ui.components.AddRepeatingTaskDialog
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -162,6 +164,7 @@ fun BrainScreen(viewModel: TaskViewModel) {
     var modelToConfirmActive by remember { mutableStateOf<EdgeModelSpec?>(null) }
     var showDiagDialog by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
+    var editingRepeatingTask by remember { mutableStateOf<RepeatingTask?>(null) }
     var showFeedbackSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -768,6 +771,77 @@ fun BrainScreen(viewModel: TaskViewModel) {
                     }
                 }
 
+                var showRepeatingTasksList by remember { mutableStateOf(false) }
+                val repeatingTasks by viewModel.repeatingTasks.collectAsState()
+
+                Text("Repeating Task Templates", color = Color.LightGray, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Card(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E2C)),
+                    shape = RoundedCornerShape(8.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showRepeatingTasksList = !showRepeatingTasksList }
+                            .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Manage ${repeatingTasks.size} templates",
+                                color = Color.White,
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                text = if (showRepeatingTasksList) "▲" else "▼",
+                                color = Color(0xFF03DAC6),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        if (showRepeatingTasksList) {
+                            HorizontalDivider(color = Color(0xFF28283C))
+                            if (repeatingTasks.isEmpty()) {
+                                Text(
+                                    text = "No templates defined. Use '+' button in chat or save suggestions.",
+                                    color = Color.Gray,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(12.dp)
+                                )
+                            } else {
+                                Column(modifier = Modifier.padding(6.dp)) {
+                                    repeatingTasks.forEach { rt ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .clickable { editingRepeatingTask = rt }
+                                                .padding(horizontal = 8.dp, vertical = 10.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(rt.title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                                Text(
+                                                    text = "Every ${rt.intervalValue} ${rt.recurrenceType.name.lowercase()} (Imp: ${rt.importance}, Urg: ${rt.urgency})",
+                                                    color = Color.LightGray,
+                                                    fontSize = 11.sp
+                                                )
+                                            }
+                                            Icon(
+                                                imageVector = Icons.Filled.Edit,
+                                                contentDescription = "Edit template",
+                                                tint = Color(0xFF03DAC6).copy(alpha = 0.8f),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Text("Executive Profile", color = Color.LightGray, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))
                 Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
@@ -1178,6 +1252,21 @@ fun BrainScreen(viewModel: TaskViewModel) {
     }
 
     // DIALOGS
+    editingRepeatingTask?.let { rt ->
+        AddRepeatingTaskDialog(
+            existingRepeatingTask = rt,
+            onDismiss = { editingRepeatingTask = null },
+            onSave = { updated ->
+                viewModel.updateRepeatingTask(updated)
+                editingRepeatingTask = null
+            },
+            onDelete = {
+                viewModel.deleteRepeatingTask(rt)
+                editingRepeatingTask = null
+            }
+        )
+    }
+
     if (showFeedbackSheet) {
         FeedbackDialog(
             viewModel = viewModel,

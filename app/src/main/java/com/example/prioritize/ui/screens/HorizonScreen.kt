@@ -19,6 +19,7 @@ import com.example.prioritize.data.Task
 import com.example.prioritize.data.SpecialDate
 import com.example.prioritize.data.SpecialDateType
 import com.example.prioritize.ui.viewmodel.TaskViewModel
+import com.example.prioritize.ui.components.AddSpecialDateDialog
 import java.util.Calendar
 
 sealed class HorizonItem : Comparable<HorizonItem> {
@@ -59,6 +60,7 @@ fun getNextOccurrenceMs(date: SpecialDate, currentTimeMs: Long): Long {
 fun HorizonScreen(viewModel: TaskViewModel) {
     val activeTasks by viewModel.activeTasks.collectAsState(initial = emptyList())
     val specialDates by viewModel.specialDates.collectAsState(initial = emptyList())
+    var editingSpecialDate by remember { mutableStateOf<SpecialDate?>(null) }
 
     // currentTime refreshes every 60 seconds so horizon buckets stay accurate
     var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -162,22 +164,37 @@ fun HorizonScreen(viewModel: TaskViewModel) {
         }
 
         item {
-            HorizonPanel(title = "Week Ahead", items = weekItems, defaultColor = Color(0xFF03DAC6))
+            HorizonPanel(title = "Week Ahead", items = weekItems, defaultColor = Color(0xFF03DAC6), onDateClick = { editingSpecialDate = it })
         }
 
         item {
-            HorizonPanel(title = "Month Ahead", items = monthItems, defaultColor = Color(0xFFBB86FC))
+            HorizonPanel(title = "Month Ahead", items = monthItems, defaultColor = Color(0xFFBB86FC), onDateClick = { editingSpecialDate = it })
         }
 
         item {
-            HorizonPanel(title = "Quarter Ahead", items = quarterItems, defaultColor = Color(0xFF3700B3))
+            HorizonPanel(title = "Quarter Ahead", items = quarterItems, defaultColor = Color(0xFF3700B3), onDateClick = { editingSpecialDate = it })
         }
 
         item {
-            HorizonPanel(title = "Year & Beyond", items = yearItems, defaultColor = Color(0xFF1F1B24))
+            HorizonPanel(title = "Year & Beyond", items = yearItems, defaultColor = Color(0xFF1F1B24), onDateClick = { editingSpecialDate = it })
         }
 
         item { Spacer(Modifier.height(80.dp)) }
+    }
+
+    editingSpecialDate?.let { date ->
+        AddSpecialDateDialog(
+            existingSpecialDate = date,
+            onDismiss = { editingSpecialDate = null },
+            onSave = { updated ->
+                viewModel.updateSpecialDate(updated)
+                editingSpecialDate = null
+            },
+            onDelete = {
+                viewModel.deleteSpecialDate(date)
+                editingSpecialDate = null
+            }
+        )
     }
 }
 
@@ -185,7 +202,8 @@ fun HorizonScreen(viewModel: TaskViewModel) {
 fun HorizonPanel(
     title: String,
     items: List<HorizonItem>,
-    defaultColor: Color
+    defaultColor: Color,
+    onDateClick: (SpecialDate) -> Unit
 ) {
     var isExpanded by remember { mutableStateOf(true) }
 
@@ -234,7 +252,7 @@ fun HorizonPanel(
                         items.forEach { item ->
                             when (item) {
                                 is HorizonItem.TaskItem -> CompactHorizonTaskRow(item.task)
-                                is HorizonItem.DateItem -> CompactHorizonDateRow(item.date, item.msRemaining)
+                                is HorizonItem.DateItem -> CompactHorizonDateRow(item.date, item.msRemaining, onClick = { onDateClick(item.date) })
                             }
                         }
                     }
@@ -328,7 +346,7 @@ fun CompactHorizonTaskRow(task: Task) {
 }
 
 @Composable
-fun CompactHorizonDateRow(date: SpecialDate, msRemaining: Long) {
+fun CompactHorizonDateRow(date: SpecialDate, msRemaining: Long, onClick: () -> Unit) {
     val indicatorColor = when (date.type) {
         SpecialDateType.BIRTHDAY -> Color(0xFFFF4081) // Pink
         SpecialDateType.ANNIVERSARY -> Color(0xFFFBC02D) // Gold
@@ -347,6 +365,7 @@ fun CompactHorizonDateRow(date: SpecialDate, msRemaining: Long) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(Color(0xFF1E1E2C).copy(alpha = 0.8f))
+            .clickable { onClick() }
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

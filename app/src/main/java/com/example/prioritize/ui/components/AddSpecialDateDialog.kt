@@ -22,22 +22,24 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddSpecialDateDialog(
+    existingSpecialDate: SpecialDate? = null,
     onDismiss: () -> Unit,
-    onSave: (SpecialDate) -> Unit
+    onSave: (SpecialDate) -> Unit,
+    onDelete: (() -> Unit)? = null
 ) {
-    var name by remember { mutableStateOf("") }
-    var selectedType by remember { mutableStateOf(SpecialDateType.BIRTHDAY) }
+    var name by remember { mutableStateOf(existingSpecialDate?.name ?: "") }
+    var selectedType by remember { mutableStateOf(existingSpecialDate?.type ?: SpecialDateType.BIRTHDAY) }
     var typeExpanded by remember { mutableStateOf(false) }
 
-    // Initialize to today
+    // Initialize to today or existing date
     val currentCal = Calendar.getInstance()
-    var selectedMonth by remember { mutableStateOf(currentCal.get(Calendar.MONTH) + 1) } // 1-12
-    var selectedDay by remember { mutableStateOf(currentCal.get(Calendar.DAY_OF_MONTH)) }
+    var selectedMonth by remember { mutableStateOf(existingSpecialDate?.dateMonth ?: (currentCal.get(Calendar.MONTH) + 1)) } // 1-12
+    var selectedDay by remember { mutableStateOf(existingSpecialDate?.dateDay ?: currentCal.get(Calendar.DAY_OF_MONTH)) }
 
     val months = java.text.DateFormatSymbols().months.take(12)
     var monthExpanded by remember { mutableStateOf(false) }
     var dayExpanded by remember { mutableStateOf(false) }
-    var originalYear by remember { mutableStateOf("") }
+    var originalYear by remember { mutableStateOf(existingSpecialDate?.originalYear?.toString() ?: "") }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -52,7 +54,7 @@ fun AddSpecialDateDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "Add Important Date",
+                    text = if (existingSpecialDate == null) "Add Important Date" else "Edit Important Date",
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp
@@ -134,7 +136,7 @@ fun AddSpecialDateDialog(
                                 Icon(Icons.Default.ArrowDropDown, "Select Month", Modifier.clickable { monthExpanded = true })
                             },
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                                  focusedTextColor = Color.White, unfocusedTextColor = Color.White,
                                 focusedBorderColor = Color(0xFFBB86FC), unfocusedBorderColor = Color.Gray
                             ),
                             modifier = Modifier.fillMaxWidth().clickable { monthExpanded = true }
@@ -192,29 +194,44 @@ fun AddSpecialDateDialog(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Cancel", color = Color.Gray)
+                    if (existingSpecialDate != null && onDelete != null) {
+                        TextButton(
+                            onClick = onDelete,
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFCF6679))
+                        ) {
+                            Text("Delete", fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.width(1.dp))
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            if (name.isNotBlank()) {
-                                onSave(
-                                    SpecialDate(
-                                        name = name.trim(),
-                                        type = selectedType,
-                                        dateMonth = selectedMonth,
-                                        dateDay = selectedDay,
-                                        originalYear = originalYear.toIntOrNull()
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = onDismiss) {
+                            Text("Cancel", color = Color.Gray)
+                        }
+                        Button(
+                            onClick = {
+                                if (name.isNotBlank()) {
+                                    onSave(
+                                        SpecialDate(
+                                            id = existingSpecialDate?.id ?: 0,
+                                            name = name.trim(),
+                                            type = selectedType,
+                                            dateMonth = selectedMonth,
+                                            dateDay = selectedDay,
+                                            originalYear = originalYear.toIntOrNull(),
+                                            lastTriggeredYear = existingSpecialDate?.lastTriggeredYear ?: 0
+                                        )
                                     )
-                                )
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBB86FC))
-                    ) {
-                        Text("Save", color = Color.Black, fontWeight = FontWeight.Bold)
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBB86FC))
+                        ) {
+                            Text("Save", color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }

@@ -998,6 +998,30 @@ class TaskViewModel(
         }
     }
 
+    fun updateRepeatingTask(task: RepeatingTask) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.updateRepeatingTask(task)
+        }
+    }
+
+    fun deleteRepeatingTask(task: RepeatingTask) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteRepeatingTask(task)
+        }
+    }
+
+    fun updateSpecialDate(specialDate: SpecialDate) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.updateSpecialDate(specialDate)
+        }
+    }
+
+    fun deleteSpecialDate(specialDate: SpecialDate) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteSpecialDate(specialDate)
+        }
+    }
+
     // Brain Chat Brainstorming / Onboarding
     fun startOnboardingInterview() {
         _onboardingPhase.value = 1

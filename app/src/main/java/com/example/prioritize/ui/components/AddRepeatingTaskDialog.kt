@@ -26,22 +26,24 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddRepeatingTaskDialog(
+    existingRepeatingTask: RepeatingTask? = null,
     onDismiss: () -> Unit,
-    onSave: (RepeatingTask) -> Unit
+    onSave: (RepeatingTask) -> Unit,
+    onDelete: (() -> Unit)? = null
 ) {
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var selectedType by remember { mutableStateOf(RecurrenceType.WEEKLY) }
+    var title by remember { mutableStateOf(existingRepeatingTask?.title ?: "") }
+    var description by remember { mutableStateOf(existingRepeatingTask?.description ?: "") }
+    var selectedType by remember { mutableStateOf(existingRepeatingTask?.recurrenceType ?: RecurrenceType.WEEKLY) }
     var typeExpanded by remember { mutableStateOf(false) }
-    var interval by remember { mutableStateOf("1") }
+    var interval by remember { mutableStateOf(existingRepeatingTask?.intervalValue?.toString() ?: "1") }
     
-    var importance by remember { mutableFloatStateOf(5f) }
-    var urgency by remember { mutableFloatStateOf(5f) }
+    var importance by remember { mutableFloatStateOf(existingRepeatingTask?.importance?.toFloat() ?: 5f) }
+    var urgency by remember { mutableFloatStateOf(existingRepeatingTask?.urgency?.toFloat() ?: 5f) }
     
     val context = LocalContext.current
-    var startDate by remember { mutableStateOf(System.currentTimeMillis() + 86400000L) }
-    var isSoftDeadline by remember { mutableStateOf(false) }
-    var graceDays by remember { mutableFloatStateOf(2f) }
+    var startDate by remember { mutableStateOf(existingRepeatingTask?.nextDueDate ?: (System.currentTimeMillis() + 86400000L)) }
+    var isSoftDeadline by remember { mutableStateOf(existingRepeatingTask?.isSoftDeadline ?: false) }
+    var graceDays by remember { mutableFloatStateOf(existingRepeatingTask?.graceDays?.toFloat() ?: 2f) }
     
     val dateFormatter = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
 
@@ -59,7 +61,7 @@ fun AddRepeatingTaskDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "Add Repeating Task",
+                    text = if (existingRepeatingTask == null) "Add Repeating Task" else "Edit Repeating Task",
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp
@@ -212,36 +214,49 @@ fun AddRepeatingTaskDialog(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Cancel", color = Color.Gray)
+                    if (existingRepeatingTask != null && onDelete != null) {
+                        TextButton(
+                            onClick = onDelete,
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFCF6679))
+                        ) {
+                            Text("Delete", fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.width(1.dp))
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            if (title.isNotBlank()) {
-                                val intervalVal = interval.toIntOrNull()?.coerceAtLeast(1) ?: 1
-                                // For next due date, we just use current time + 1 day as the initial starting point, 
-                                // and the cadence engine will tick it over.
-                                onSave(
-                                    RepeatingTask(
-                                        title = title.trim(),
-                                        description = description.trim(),
-                                        importance = importance.toInt(),
-                                        urgency = urgency.toInt(),
-                                        recurrenceType = selectedType,
-                                        intervalValue = intervalVal,
-                                        nextDueDate = startDate,
-                                        isSoftDeadline = isSoftDeadline,
-                                        graceDays = graceDays.toInt()
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = onDismiss) {
+                            Text("Cancel", color = Color.Gray)
+                        }
+                        Button(
+                            onClick = {
+                                if (title.isNotBlank()) {
+                                    val intervalVal = interval.toIntOrNull()?.coerceAtLeast(1) ?: 1
+                                    onSave(
+                                        RepeatingTask(
+                                            id = existingRepeatingTask?.id ?: 0,
+                                            title = title.trim(),
+                                            description = description.trim(),
+                                            importance = importance.toInt(),
+                                            urgency = urgency.toInt(),
+                                            recurrenceType = selectedType,
+                                            intervalValue = intervalVal,
+                                            nextDueDate = startDate,
+                                            isSoftDeadline = isSoftDeadline,
+                                            graceDays = graceDays.toInt(),
+                                            lastCompletedAt = existingRepeatingTask?.lastCompletedAt
+                                        )
                                     )
-                                )
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF03DAC6))
-                    ) {
-                        Text("Save", color = Color.Black, fontWeight = FontWeight.Bold)
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF03DAC6))
+                        ) {
+                            Text("Save", color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
