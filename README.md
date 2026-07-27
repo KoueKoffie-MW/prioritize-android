@@ -93,14 +93,14 @@ app/
 ├── data/
 │   ├── Task.kt / SubTask.kt     # Core Room entities
 │   ├── TaskDao.kt               # All database queries
-│   ├── TaskDatabase.kt          # Room DB, version 5, exportSchema = true
-│   ├── Migrations.kt            # Explicit migrations v2→v3→v4→v5 (no destructive fallback)
+│   ├── TaskDatabase.kt          # Room DB, version 10, exportSchema = true
+│   ├── Migrations.kt            # Explicit migrations v2→v3→v4→v5→v6→v7→v8→v9→v10 (no destructive fallback)
 │   └── TaskRepository.kt        # Single source of truth for data layer
 ├── ui/
 │   ├── components/              # TaskCard, BreakdownDialog, ConfirmTaskDialog, ...
 │   ├── screens/                 # FocusListScreen, MatrixScreen, HorizonScreen, BrainScreen, ...
 │   └── viewmodel/
-│       ├── TaskViewModel.kt     # Central ViewModel (~1100 lines), AI orchestration, RAG, chat
+│       ├── TaskViewModel.kt     # Central ViewModel (~2000 lines), AI orchestration, RAG, chat
 │       ├── ModelRegistry.kt     # Model catalogue with filenames, sizes, and backend hints
 │       └── BackupManager.kt     # JSON export/import for task data
 └── worker/
