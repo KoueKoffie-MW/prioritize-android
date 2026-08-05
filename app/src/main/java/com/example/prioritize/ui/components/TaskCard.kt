@@ -402,7 +402,6 @@ private fun Modifier.scale(scale: Float): Modifier = this.then(
 // ── SwipeableTaskCard ────────────────────────────────────────────
 // Wraps TaskCard with swipe-to-complete (right) and swipe-to-delete (left).
 // For use only with active (non-completed) tasks in FocusListScreen.
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SwipeableTaskCard(
     task: Task,
@@ -414,104 +413,15 @@ fun SwipeableTaskCard(
     onBreakdownClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val haptic = LocalHapticFeedback.current
-
-    // Guard: only handle each swipe gesture ONCE. LaunchedEffect(currentValue) can fire
-    // multiple times during recomposition (especially when Room emits a new list).
-    // We track whether we've already acted on the current non-Settled state.
-    var swipeHandled by remember { mutableStateOf(false) }
-
-    // Migrate away from deprecated confirmValueChange — use LaunchedEffect on currentValue instead.
-    val dismissState = rememberSwipeToDismissBoxState(
-        positionalThreshold = { totalDistance -> totalDistance * 0.60f }
-    )
-
-    // Reset the guard whenever the card returns to Settled (user lets go without completing)
-    LaunchedEffect(dismissState.currentValue) {
-        if (dismissState.currentValue == SwipeToDismissBoxValue.Settled) {
-            swipeHandled = false
-        }
-    }
-
-    // React to swipe completion AFTER the state is committed
-    LaunchedEffect(dismissState.currentValue) {
-        when (dismissState.currentValue) {
-            SwipeToDismissBoxValue.StartToEnd -> {
-                if (!swipeHandled) {
-                    swipeHandled = true
-                    // Swipe right → haptic + mark complete, snap card back
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onCompleteChange(true)
-                    dismissState.reset()
-                }
-            }
-            SwipeToDismissBoxValue.EndToStart -> {
-                if (!swipeHandled) {
-                    swipeHandled = true
-                    // Swipe left → haptic + delete
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onDeleteClick()
-                }
-            }
-            SwipeToDismissBoxValue.Settled -> { /* no-op */ }
-        }
-    }
-
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = true,
-        enableDismissFromEndToStart = true,
-        backgroundContent = {
-            val direction = dismissState.dismissDirection
-            val bgColor by animateColorAsState(
-                targetValue = when (direction) {
-                    SwipeToDismissBoxValue.StartToEnd -> Color(0xFF22D3A0).copy(alpha = 0.88f)
-                    SwipeToDismissBoxValue.EndToStart -> Color(0xFFCF6679).copy(alpha = 0.88f)
-                    else                              -> Color.Transparent
-                },
-                label = "swipeBg"
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(vertical = 5.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(bgColor)
-                    .padding(horizontal = 24.dp),
-                contentAlignment = when (direction) {
-                    SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
-                    else                              -> Alignment.CenterEnd
-                }
-            ) {
-                when (direction) {
-                    SwipeToDismissBoxValue.StartToEnd -> Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text("✓", color = Color.Black, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
-                        Text("Complete", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    }
-                    SwipeToDismissBoxValue.EndToStart -> Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text("Delete", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Text("🗑", fontSize = 18.sp)
-                    }
-                    else -> {}
-                }
-            }
-        },
+    // Swipe gesture removed per Issue #5 to prevent accidental deletions/completions during vertical scrolling.
+    TaskCard(
+        task = task,
+        subTasks = subTasks,
+        onCompleteChange = onCompleteChange,
+        onSubTaskCompleteChange = onSubTaskCompleteChange,
+        onDeleteClick = onDeleteClick,
+        onEditClick = onEditClick,
+        onBreakdownClick = onBreakdownClick,
         modifier = modifier
-    ) {
-        TaskCard(
-            task = task,
-            subTasks = subTasks,
-            onCompleteChange = onCompleteChange,
-            onSubTaskCompleteChange = onSubTaskCompleteChange,
-            onDeleteClick = onDeleteClick,
-            onEditClick = onEditClick,
-            onBreakdownClick = onBreakdownClick
-        )
-    }
+    )
 }
