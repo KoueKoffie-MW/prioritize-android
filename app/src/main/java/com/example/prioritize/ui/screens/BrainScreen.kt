@@ -496,13 +496,19 @@ fun BrainScreen(viewModel: TaskViewModel) {
                         )
                     }
                     Spacer(Modifier.width(8.dp))
-                    Text("Photo Attached", color = Color.White, modifier = Modifier.weight(1f), fontSize = 12.sp)
+                    val imgSize = remember(selectedImageUri) {
+                                try { context.contentResolver.openInputStream(selectedImageUri!!)?.use { it.available() / 1024 } ?: 0 } catch (_: Exception) { 0 }
+                            }
+                            Text("Photo Attached" + if (imgSize > 0) " (${imgSize} KB)" else "", color = Color.White, modifier = Modifier.weight(1f), fontSize = 12.sp)
                     IconButton(onClick = { selectedImageUri = null }) {
                         Text("×", color = Color.Red, fontSize = 20.sp)
                     }
                 }
                 if (selectedAudioUri != null) {
-                    Text("🎵 Audio file attached", color = Color.White, modifier = Modifier.weight(1f), fontSize = 12.sp)
+                    val audSize = remember(selectedAudioUri) {
+                                try { context.contentResolver.openInputStream(selectedAudioUri!!)?.use { it.available() / 1024 } ?: 0 } catch (_: Exception) { 0 }
+                            }
+                            Text("🎵 Audio attached" + if (audSize > 0) " (${audSize} KB)" else "", color = Color.White, modifier = Modifier.weight(1f), fontSize = 12.sp)
                     IconButton(onClick = { selectedAudioUri = null }) {
                         Text("×", color = Color.Red, fontSize = 20.sp)
                     }
