@@ -131,3 +131,8 @@ Next autonomous target: Image/audio attachments in Brain tab (#2) + broader atta
 - Clear "unavailable" messaging instead of blank or crash.
 - Combined with earlier copy improvements, attachments should now be far more reliable.
 
+
+**Commit/Push Policy (as requested):**  
+After every meaningful change (fix, research finding, or UX tweak), I commit locally with a clear message and immediately attempt `git push origin GroksGoal`.  
+Local commits are always done; remote push may retry on timeout.
+
