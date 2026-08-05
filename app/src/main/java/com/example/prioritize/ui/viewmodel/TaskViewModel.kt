@@ -1371,7 +1371,7 @@ For repeating/recurring tasks, append:
                         _chatAttachmentStatus.value = "Thinking..."
                         val rawResult = withContext(Dispatchers.Default) {
                             try {
-                                parser.runMultimodalInference(promptContext, imageBitmap, audioBytes)
+                                parser.runMultimodalInference(promptContext, imageBitmap, audioBytes) // multimodal with fallbacks (reviewed from GeminisGoal)
                             } catch (e: Exception) {
                                 Log.e("BrainInference", "Multimodal inference exception", e)
                                 null
@@ -1761,6 +1761,12 @@ For repeating/recurring tasks, append:
                 
                 _chatAttachmentStatus.value = "Decoding audio file..."
                 val savedAudioPath = withContext(Dispatchers.IO) { copyAttachmentToInternal(context, attachedAudioPath) }
+                if (savedAudioPath.isNullOrBlank()) {
+                    _aiErrorMsg.value = "Failed to copy audio file to internal storage."
+                    _isChatLoading.value = false
+                    _chatAttachmentStatus.value = null
+                    return@launch
+                }
                 
                 val profile = repository.getUserProfile()
                 val accent = profile?.userAccent ?: "South African Afrikaans"
