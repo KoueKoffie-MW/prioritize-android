@@ -708,8 +708,18 @@ fun BrainScreen(viewModel: TaskViewModel) {
                                         },
                                         onError = { err ->
                                             isRecordingSpeech = false
+                                            val fallback = partialTranscriptText
                                             partialTranscriptText = ""
-                                            Toast.makeText(context, "Speech Error: $err", Toast.LENGTH_SHORT).show()
+                                            if (fallback.isNotBlank()) {
+                                                // Salvage partial transcript instead of losing everything
+                                                rawTranscriptText = fallback
+                                                viewModel.refineTranscription(fallback, language) { refined ->
+                                                    refinedTranscriptText = refined
+                                                    showReviewDialog = true
+                                                }
+                                            } else {
+                                                Toast.makeText(context, "Speech Error: $err", Toast.LENGTH_SHORT).show()
+                                            }
                                         }
                                     )
                                 } else if (targetType == LanguageSelectorType.UPLOAD) {
