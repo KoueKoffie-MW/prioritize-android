@@ -125,3 +125,9 @@ Next: Voice capture reliability (#1 + #4).
 
 Next autonomous target: Image/audio attachments in Brain tab (#2) + broader attachment UX.
 
+
+### Later attachment work
+- Added existence guards in image and audio rendering in ChatMessageBubble / AudioPlayerWidget.
+- Clear "unavailable" messaging instead of blank or crash.
+- Combined with earlier copy improvements, attachments should now be far more reliable.
+
