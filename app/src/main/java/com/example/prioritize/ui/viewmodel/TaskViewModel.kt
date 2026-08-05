@@ -1030,18 +1030,29 @@ class TaskViewModel(
         )
     }
 
-    private fun copyAttachmentToInternal(context: Context, sourcePath: String): String {
+    private fun copyAttachmentToInternal(context: Context, sourcePath: String): String? {
         val srcFile = File(sourcePath)
-        if (!srcFile.exists()) return sourcePath
+        if (!srcFile.exists()) {
+            Log.w("TaskViewModel", "Source attachment does not exist: $sourcePath")
+            return null
+        }
         val destDir = File(context.filesDir, "chat_attachments")
         if (!destDir.exists()) destDir.mkdirs()
-        val destFile = File(destDir, "${System.currentTimeMillis()}_${srcFile.name}")
-        try {
+        // Use a clean name to avoid collisions and special chars
+        val safeName = srcFile.name.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val destFile = File(destDir, "${System.currentTimeMillis()}_$safeName")
+        return try {
             srcFile.copyTo(destFile, overwrite = true)
-            return destFile.absolutePath
+            if (destFile.exists() && destFile.length() > 0) {
+                Log.d("TaskViewModel", "Attachment copied successfully to ${destFile.absolutePath}")
+                destFile.absolutePath
+            } else {
+                Log.e("TaskViewModel", "Copy produced empty or missing file")
+                null
+            }
         } catch (e: Exception) {
             Log.e("TaskViewModel", "Failed to copy attachment: $sourcePath", e)
-            return sourcePath
+            null
         }
     }
 
@@ -1078,6 +1089,9 @@ class TaskViewModel(
                     path?.let { copyAttachmentToInternal(context, it) }
                 }
             }
+
+            // Log attachment results for debugging
+            Log.d("TaskViewModel", "Attachments prepared - image: $savedImagePath, audio: $savedAudioPath, doc: $savedDocPath")
             // Pre-flight RAM protection check
             val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
             val memInfo = android.app.ActivityManager.MemoryInfo()
