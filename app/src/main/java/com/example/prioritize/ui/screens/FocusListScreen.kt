@@ -290,7 +290,18 @@ fun FocusListScreen(
                             SwipeableTaskCard(
                                 task = task,
                                 subTasks = subTasks,
-                                onCompleteChange = { isChecked -> viewModel.toggleTaskCompletion(task, isChecked) },
+                                onCompleteChange = { isChecked ->
+                                if (isChecked) {
+                                    // Haptic for immediate tactile confirmation (ADHD-friendly)
+                                    try {
+                                        val act = context as? android.app.Activity
+                                        act?.window?.decorView?.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                                    } catch (_: Exception) {}
+                                    handleCompleteTask(task)
+                                } else {
+                                    viewModel.toggleTaskCompletion(task, false)
+                                }
+                            },
                                 onSubTaskCompleteChange = { subTask, isChecked -> viewModel.toggleSubTaskCompletion(subTask, isChecked) },
                                 onDeleteClick = { handleDeleteTask(task) },
                                 onEditClick = { activeTaskForEdit = task },
@@ -334,7 +345,18 @@ fun FocusListScreen(
                             SwipeableTaskCard(
                                 task = task,
                                 subTasks = subTasks,
-                                onCompleteChange = { isChecked -> viewModel.toggleTaskCompletion(task, isChecked) },
+                                onCompleteChange = { isChecked ->
+                                if (isChecked) {
+                                    // Haptic for immediate tactile confirmation (ADHD-friendly)
+                                    try {
+                                        val act = context as? android.app.Activity
+                                        act?.window?.decorView?.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                                    } catch (_: Exception) {}
+                                    handleCompleteTask(task)
+                                } else {
+                                    viewModel.toggleTaskCompletion(task, false)
+                                }
+                            },
                                 onSubTaskCompleteChange = { subTask, isChecked -> viewModel.toggleSubTaskCompletion(subTask, isChecked) },
                                 onDeleteClick = { handleDeleteTask(task) },
                                 onEditClick = { activeTaskForEdit = task },
