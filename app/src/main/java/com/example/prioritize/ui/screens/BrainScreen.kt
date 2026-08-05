@@ -1386,24 +1386,44 @@ fun ChatMessageBubble(
             Column {
                 if (message.imagePath != null) {
                     var bitmap by remember(message.imagePath) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+                    var fileMissing by remember(message.imagePath) { mutableStateOf(false) }
                     LaunchedEffect(message.imagePath) {
                         val loaded = withContext(Dispatchers.IO) {
                             try {
-                                android.graphics.BitmapFactory.decodeFile(message.imagePath)?.asImageBitmap()
-                            } catch (e: Exception) { null }
+                                val f = java.io.File(message.imagePath)
+                                if (f.exists() && f.length() > 0) {
+                                    android.graphics.BitmapFactory.decodeFile(message.imagePath)?.asImageBitmap()
+                                } else {
+                                    fileMissing = true
+                                    null
+                                }
+                            } catch (e: Exception) { 
+                                fileMissing = true
+                                null 
+                            }
                         }
                         bitmap = loaded
                     }
-                    if (bitmap != null) {
-                        androidx.compose.foundation.Image(
-                            bitmap = bitmap!!,
-                            contentDescription = "Chat Image Attachment",
-                            modifier = Modifier
-                                .padding(bottom = 6.dp)
-                                .widthIn(max = 240.dp)
-                                .heightIn(max = 240.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                        )
+                    when {
+                        bitmap != null -> {
+                            androidx.compose.foundation.Image(
+                                bitmap = bitmap!!,
+                                contentDescription = "Chat Image Attachment",
+                                modifier = Modifier
+                                    .padding(bottom = 6.dp)
+                                    .widthIn(max = 240.dp)
+                                    .heightIn(max = 240.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                            )
+                        }
+                        fileMissing -> {
+                            Text(
+                                text = "📷 Image unavailable (file missing)",
+                                color = textColor.copy(alpha = 0.6f),
+                                fontSize = 11.sp,
+                                fontStyle = androidx.compose.ui.text.TextStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                            )
+                        }
                     }
                 }
                 if (message.text.isNotEmpty()) {
@@ -1647,6 +1667,17 @@ fun AudioPlayerWidget(audioPath: String) {
             player?.release()
             player = null
         }
+    }
+
+    val audioFile = java.io.File(audioPath)
+    if (!audioFile.exists() || audioFile.length() == 0L) {
+        Text(
+            text = "🎵 Audio unavailable (file missing)",
+            color = Color(0xFF8888AA),
+            fontSize = 11.sp,
+            fontStyle = androidx.compose.ui.text.TextStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+        )
+        return
     }
 
     Row(
