@@ -57,32 +57,47 @@ fun FocusListScreen(
     val subTasksMap by viewModel.subTasksMap.collectAsState()
     val repeatingTasks by viewModel.repeatingTasks.collectAsState()
 
-    var activeTaskForEdit by remember { mutableStateOf<Task?>(null) }
-    var editingRepeatingTask by remember { mutableStateOf<RepeatingTask?>(null) }
-    var showCompleted by remember { mutableStateOf(false) }
-    var showDeleted by remember { mutableStateOf(false) }
-    var sortByDeadline by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
 
-    val isModelAvailable by viewModel.isModelAvailable.collectAsState()
+    val handleDeleteTask: (Task) -> Unit = { task ->
+        viewModel.deleteTask(task)
+        coroutineScope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            val result = snackbarHostState.showSnackbar(
+                message = "'${task.title}' moved to Recycle Bin",
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                viewModel.restoreTask(task)
+            }
+        }
+    }
 
-    // Sort locally: VM already sorts by score; deadline sort is UI-only
-    val sortedTasks = if (sortByDeadline) {
-        activeTasks.sortedWith(
-            compareBy<Task> { it.deadline == null }.thenBy { it.deadline }
-        )
-    } else activeTasks
+    val handleCompleteTask: (Task) -> Unit = { task ->
+        viewModel.toggleTaskCompletion(task, true)
+        coroutineScope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            val result = snackbarHostState.showSnackbar(
+                message = "'${task.title}' marked complete",
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                viewModel.toggleTaskCompletion(task, false)
+            }
+        }
+    }
 
-    val top3Tasks = sortedTasks.take(3)
-    val remainingTasks = sortedTasks.drop(3)
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(BG)
-            .padding(horizontal = 16.dp)
-    ) {
-        // ── Compact header ─────────────────────────────────────────────────
-        Spacer(Modifier.height(16.dp))
+    Box(modifier = modifier.fillMaxSize().background(BG)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp)
+        ) {
+            // ── Compact header ─────────────────────────────────────────────────
+            Spacer(Modifier.height(16.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -273,9 +288,9 @@ fun FocusListScreen(
                         SwipeableTaskCard(
                             task = task,
                             subTasks = subTasks,
-                            onCompleteChange = { isChecked -> viewModel.toggleTaskCompletion(task, isChecked) },
+                            onCompleteChange = { isChecked -> if (isChecked) handleCompleteTask(task) else viewModel.toggleTaskCompletion(task, false) },
                             onSubTaskCompleteChange = { subTask, isChecked -> viewModel.toggleSubTaskCompletion(subTask, isChecked) },
-                            onDeleteClick = { viewModel.deleteTask(task) },
+                            onDeleteClick = { handleDeleteTask(task) },
                             onEditClick = { activeTaskForEdit = task },
                             onBreakdownClick = { onBreakdownClick(task) }
                         )
@@ -317,9 +332,9 @@ fun FocusListScreen(
                         SwipeableTaskCard(
                             task = task,
                             subTasks = subTasks,
-                            onCompleteChange = { isChecked -> viewModel.toggleTaskCompletion(task, isChecked) },
+                            onCompleteChange = { isChecked -> if (isChecked) handleCompleteTask(task) else viewModel.toggleTaskCompletion(task, false) },
                             onSubTaskCompleteChange = { subTask, isChecked -> viewModel.toggleSubTaskCompletion(subTask, isChecked) },
-                            onDeleteClick = { viewModel.deleteTask(task) },
+                            onDeleteClick = { handleDeleteTask(task) },
                             onEditClick = { activeTaskForEdit = task },
                             onBreakdownClick = { onBreakdownClick(task) }
                         )
@@ -406,7 +421,7 @@ fun FocusListScreen(
                                     onSubTaskCompleteChange = { subTask, isChecked ->
                                         viewModel.toggleSubTaskCompletion(subTask, isChecked)
                                     },
-                                    onDeleteClick = { viewModel.deleteTask(task) },
+                                    onDeleteClick = { handleDeleteTask(task) },
                                     onEditClick = { activeTaskForEdit = task },
                                     onBreakdownClick = { onBreakdownClick(task) }
                                 )
@@ -550,7 +565,7 @@ fun FocusListScreen(
                     activeTaskForEdit = null
                 },
                 onDelete = {
-                    viewModel.deleteTask(task)
+                    handleDeleteTask(task)
                     activeTaskForEdit = null
                 },
                 onDismiss = { activeTaskForEdit = null },
@@ -575,5 +590,12 @@ fun FocusListScreen(
                 }
             )
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp)
+        )
     }
 }
