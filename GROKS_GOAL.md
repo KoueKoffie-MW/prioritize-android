@@ -136,3 +136,11 @@ Next autonomous target: Image/audio attachments in Brain tab (#2) + broader atta
 After every meaningful change (fix, research finding, or UX tweak), I commit locally with a clear message and immediately attempt `git push origin GroksGoal`.  
 Local commits are always done; remote push may retry on timeout.
 
+
+### Recent autonomous progress (continuous commits + pushes)
+- Restored + enhanced completion with handleCompleteTask (undo) + added haptic feedback on mark complete.
+- Attachment preview now shows file sizes (KB) for images and audio → more transparent and trustworthy.
+- All changes committed locally and pushed to origin/GroksGoal.
+
+Still targeting the original 5 issues with iterative hardening + delight.
+
