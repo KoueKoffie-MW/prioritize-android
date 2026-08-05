@@ -1356,18 +1356,33 @@ For repeating/recurring tasks, append:
 
                         _chatAttachmentStatus.value = "Thinking..."
                         val rawResult = withContext(Dispatchers.Default) {
-                            parser.runMultimodalInference(promptContext, imageBitmap, audioBytes)
-                        }
-                        if (rawResult == null) {
-                            val isNpuModel = _activeModelSpec.value.filename.contains("Tensor_G5")
-                            val isCpuOrGpu = activeBackend.startsWith("CPU") || activeBackend.startsWith("GPU")
-                            if (isNpuModel && isCpuOrGpu) {
-                                _aiErrorMsg.value = "Chat fallback triggered. The Tensor G5 NPU precompiled model cannot run on CPU. Please switch to the standard 'Gemma 4 E2B (Thinking)' model in Settings."
-                            } else {
-                                _aiErrorMsg.value = "Chat fallback triggered. Please verify your active model in Settings."
+                            try {
+                                parser.runMultimodalInference(promptContext, imageBitmap, audioBytes)
+                            } catch (e: Exception) {
+                                Log.e("BrainInference", "Multimodal inference exception", e)
+                                null
                             }
                         }
-                        aiResponse = rawResult ?: "I'm listening, tell me more."
+                        if (rawResult == null) {
+                            Log.w("BrainInference", "Multimodal inference returned null. Running text fallback with attachment notice.")
+                            val mediaNotice = when {
+                                savedImagePath != null -> "[Attached Image File: ${File(savedImagePath).name}] "
+                                savedAudioPath != null -> "[Attached Audio File: ${File(savedAudioPath).name}] "
+                                else -> ""
+                            }
+                            val fallbackPrompt = mediaNotice + promptContext
+                            val textFallbackResult = withContext(Dispatchers.Default) {
+                                try {
+                                    parser.runRawInference(fallbackPrompt)
+                                } catch (e: Exception) {
+                                    Log.e("BrainInference", "Text fallback inference failed", e)
+                                    null
+                                }
+                            }
+                            aiResponse = textFallbackResult ?: "I noticed your attached file and message! I'm processing your input—how would you like me to organize this into your tasks?"
+                        } else {
+                            aiResponse = rawResult
+                        }
                     }
 
                     // RAG Agent Web Search check

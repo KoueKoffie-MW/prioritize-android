@@ -49,119 +49,127 @@ object SpeechTranscriber {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, languageCode)
                 putExtra(RecognizerIntent.EXTRA_SUPPORTED_LANGUAGES, languageCode)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 6000L)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 8000L)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 8000L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 10000L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 12000L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 12000L)
             }
             currentIntent = intent
 
-            try {
-                val newRecognizer = SpeechRecognizer.createSpeechRecognizer(context.applicationContext)
-                newRecognizer.setRecognitionListener(object : RecognitionListener {
-                    override fun onReadyForSpeech(params: Bundle?) {
-                        Log.d(TAG, "onReadyForSpeech")
-                    }
+            fun createAndStartRecognizer(appContext: Context) {
+                try {
+                    recognizer?.destroy()
+                } catch (_: Exception) {}
 
-                    override fun onBeginningOfSpeech() {
-                        Log.d(TAG, "onBeginningOfSpeech")
-                    }
-
-                    override fun onRmsChanged(rmsdB: Float) {}
-
-                    override fun onBufferReceived(buffer: ByteArray?) {}
-
-                    override fun onEndOfSpeech() {
-                        Log.d(TAG, "onEndOfSpeech")
-                    }
-
-                    override fun onError(error: Int) {
-                        val errorMsg = when (error) {
-                            SpeechRecognizer.ERROR_AUDIO -> "Audio recording error"
-                            SpeechRecognizer.ERROR_CLIENT -> "Client side error"
-                            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Insufficient permissions"
-                            SpeechRecognizer.ERROR_NETWORK -> "Network error"
-                            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout"
-                            SpeechRecognizer.ERROR_NO_MATCH -> "No speech recognized"
-                            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech Recognizer is busy"
-                            SpeechRecognizer.ERROR_SERVER -> "Server error"
-                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech input"
-                            else -> "Unknown error"
+                try {
+                    val newRecognizer = SpeechRecognizer.createSpeechRecognizer(appContext)
+                    newRecognizer.setRecognitionListener(object : RecognitionListener {
+                        override fun onReadyForSpeech(params: Bundle?) {
+                            Log.d(TAG, "onReadyForSpeech")
                         }
-                        Log.w(TAG, "onError: $errorMsg ($error)")
-                        
-                        mainHandler.post {
-                            if (isContinuous) {
-                                Log.i(TAG, "Continuous mode active. Restarting listener after error: $errorMsg")
-                                try {
-                                    recognizer?.startListening(currentIntent)
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Failed to restart listening after error", e)
-                                }
-                            } else {
-                                val fallbackText = if (latestPartialText.isNotBlank()) {
-                                    if (accumulatedText.isEmpty()) latestPartialText else "$accumulatedText $latestPartialText"
-                                } else {
-                                    accumulatedText.toString()
-                                }.trim()
 
-                                if (fallbackText.isNotBlank()) {
-                                    Log.i(TAG, "onError triggered but fallback text is available. Invoking onFinalResult.")
-                                    onFinalResultCallback?.invoke(fallbackText)
-                                } else {
-                                    onErrorCallback?.invoke(errorMsg)
-                                }
-                                cleanUp()
-                            }
+                        override fun onBeginningOfSpeech() {
+                            Log.d(TAG, "onBeginningOfSpeech")
                         }
-                    }
 
-                    override fun onResults(results: Bundle?) {
-                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        val text = matches?.firstOrNull() ?: ""
-                        
-                        mainHandler.post {
-                            latestPartialText = ""
-                            if (text.isNotBlank()) {
-                                if (accumulatedText.isEmpty()) {
-                                    accumulatedText.append(text)
-                                } else {
-                                    accumulatedText.append(" ").append(text)
-                                }
+                        override fun onRmsChanged(rmsdB: Float) {}
+
+                        override fun onBufferReceived(buffer: ByteArray?) {}
+
+                        override fun onEndOfSpeech() {
+                            Log.d(TAG, "onEndOfSpeech")
+                        }
+
+                        override fun onError(error: Int) {
+                            val errorMsg = when (error) {
+                                SpeechRecognizer.ERROR_AUDIO -> "Audio recording error"
+                                SpeechRecognizer.ERROR_CLIENT -> "Client side error"
+                                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Insufficient permissions"
+                                SpeechRecognizer.ERROR_NETWORK -> "Network error"
+                                SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout"
+                                SpeechRecognizer.ERROR_NO_MATCH -> "No speech recognized"
+                                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech Recognizer is busy"
+                                SpeechRecognizer.ERROR_SERVER -> "Server error"
+                                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech input"
+                                else -> "Unknown error"
                             }
+                            Log.w(TAG, "onError: $errorMsg ($error)")
                             
-                            if (isContinuous) {
-                                onPartialResultCallback?.invoke(accumulatedText.toString())
-                                try {
-                                    recognizer?.startListening(currentIntent)
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Failed to restart listening in onResults", e)
+                            mainHandler.post {
+                                if (isContinuous && (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT || error == SpeechRecognizer.ERROR_CLIENT)) {
+                                    Log.i(TAG, "Continuous mode active. Restarting fresh recognizer after pause/error: $errorMsg")
+                                    mainHandler.postDelayed({
+                                        if (isContinuous) {
+                                            createAndStartRecognizer(context.applicationContext)
+                                        }
+                                    }, 300L)
+                                } else {
+                                    val fallbackText = if (latestPartialText.isNotBlank()) {
+                                        if (accumulatedText.isEmpty()) latestPartialText else "$accumulatedText $latestPartialText"
+                                    } else {
+                                        accumulatedText.toString()
+                                    }.trim()
+
+                                    if (fallbackText.isNotBlank()) {
+                                        Log.i(TAG, "onError triggered but fallback text is available. Invoking onFinalResult.")
+                                        onFinalResultCallback?.invoke(fallbackText)
+                                    } else {
+                                        onErrorCallback?.invoke(errorMsg)
+                                    }
+                                    cleanUp()
                                 }
-                            } else {
-                                onFinalResultCallback?.invoke(accumulatedText.toString().trim())
-                                cleanUp()
                             }
                         }
-                    }
 
-                    override fun onPartialResults(partialResults: Bundle?) {
-                        val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        val partial = matches?.firstOrNull() ?: ""
-                        mainHandler.post {
-                            latestPartialText = partial
-                            val fullPartial = if (accumulatedText.isEmpty()) partial else "${accumulatedText} $partial"
-                            onPartialResultCallback?.invoke(fullPartial)
+                        override fun onResults(results: Bundle?) {
+                            val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                            val text = matches?.firstOrNull() ?: ""
+                            
+                            mainHandler.post {
+                                latestPartialText = ""
+                                if (text.isNotBlank()) {
+                                    if (accumulatedText.isEmpty()) {
+                                        accumulatedText.append(text)
+                                    } else {
+                                        accumulatedText.append(" ").append(text)
+                                    }
+                                }
+                                
+                                if (isContinuous) {
+                                    onPartialResultCallback?.invoke(accumulatedText.toString())
+                                    mainHandler.postDelayed({
+                                        if (isContinuous) {
+                                            createAndStartRecognizer(context.applicationContext)
+                                        }
+                                    }, 200L)
+                                } else {
+                                    onFinalResultCallback?.invoke(accumulatedText.toString().trim())
+                                    cleanUp()
+                                }
+                            }
                         }
-                    }
 
-                    override fun onEvent(eventType: Int, params: Bundle?) {}
-                })
-                
-                recognizer = newRecognizer
-                newRecognizer.startListening(intent)
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to initialize SpeechRecognizer", e)
-                onError("Failed to start speech recognizer: ${e.message}")
+                        override fun onPartialResults(partialResults: Bundle?) {
+                            val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                            val partial = matches?.firstOrNull() ?: ""
+                            mainHandler.post {
+                                latestPartialText = partial
+                                val fullPartial = if (accumulatedText.isEmpty()) partial else "${accumulatedText} $partial"
+                                onPartialResultCallback?.invoke(fullPartial)
+                            }
+                        }
+
+                        override fun onEvent(eventType: Int, params: Bundle?) {}
+                    })
+                    
+                    recognizer = newRecognizer
+                    newRecognizer.startListening(intent)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to initialize SpeechRecognizer", e)
+                    onErrorCallback?.invoke("Failed to start speech recognizer: ${e.message}")
+                }
             }
+
+            createAndStartRecognizer(context.applicationContext)
         }
     }
 
