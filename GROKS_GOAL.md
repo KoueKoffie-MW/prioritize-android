@@ -87,3 +87,41 @@ This is now my standing goal. I will keep returning to it, checking issues, rese
 - Good multimodal handling (image + audio + text)
 
 Add findings here as research happens.
+## Progress Log (GroksGoal)
+
+### 2026-08-05 — Session 1 (Autonomous)
+- Created branch + GROKS_GOAL.md with mission.
+- **Fixed swipe gesture sensitivity** (issues #5 + helps #3):
+  - Raised swipe threshold from 60% to 75% for complete action.
+  - Made delete swipe delegate to parent for future confirmation + undo.
+  - Added clear comments explaining ADHD considerations.
+- Committed on GroksGoal.
+- Research applied: NN/g and accessibility sources confirm high swipe sensitivity is a major source of frustration and accidental data loss, especially for ADHD users.
+
+Next autonomous actions (in priority order):
+1. Add proper undo Snackbar for complete + delete in FocusListScreen.
+2. Harden toggleTaskCompletion (better logging, immediate local feedback if needed).
+3. Move to voice transcription reliability (#1 + #4).
+4. Fix attachment persistence/display in Brain (#2).
+5. Broader UI/UX polish and research.
+
+
+### 2026-08-05 — Session 1 continued
+- **Added full undo for completion** (handleCompleteTask + Snackbar):
+  - When you swipe or checkbox complete a task, you now get an immediate "marked complete — Undo" snackbar.
+  - Symmetric to the existing delete undo.
+  - This should finally make "marking as completed" feel trustworthy and reversible.
+- Both delete and complete now have easy recovery paths.
+- This is a major win for core execution loop reliability and ADHD-friendly safety.
+
+Next: Voice capture reliability (#1 + #4).
+
+
+### Later in session
+- **Voice capture resilience**:
+  - Improved onError handling in BrainScreen: now salvages partialTranscriptText and opens the review dialog instead of dropping the recording.
+  - This should make "voice transcript not working" much less common.
+- Still to do in this area: Further tuning, better visual states, possibly better language handling.
+
+Next autonomous target: Image/audio attachments in Brain tab (#2) + broader attachment UX.
+
