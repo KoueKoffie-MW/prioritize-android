@@ -1380,8 +1380,8 @@ For repeating/recurring tasks, append:
                         if (rawResult == null) {
                             Log.w("BrainInference", "Multimodal inference returned null. Running text fallback with attachment notice.")
                             val mediaNotice = when {
-                                savedImagePath != null -> "[Attached Image File: ${File(savedImagePath).name}] "
-                                savedAudioPath != null -> "[Attached Audio File: ${File(savedAudioPath).name}] "
+                                savedImagePath != null -> "[User attached an image file named ${File(savedImagePath).name}. Describe or analyze it if relevant.] "
+                                savedAudioPath != null -> "[User attached an audio recording named ${File(savedAudioPath).name}. The audio content may be relevant to the query.] "
                                 else -> ""
                             }
                             val fallbackPrompt = mediaNotice + promptContext
