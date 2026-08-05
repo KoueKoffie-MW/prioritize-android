@@ -144,3 +144,16 @@ Local commits are always done; remote push may retry on timeout.
 
 Still targeting the original 5 issues with iterative hardening + delight.
 
+
+
+### 2026-08-05 — GeminisGoal Review & Cleanup (User Option A)
+- Compared branches: GeminisGoal (parallel local branch) vs current GroksGoal.
+- Multimodal fallbacks (context limit guard + proactive reset, OOM recovery with resetContext, image/audio token overhead, WAV header for audio, bitmap scaling to 1600px, graceful text fallback when multimodal fails) were **already present and integrated** on GroksGoal.
+- Gemini's GeminisGoal added value in AI layer robustness for Brain attachments (image + audio).
+- GroksGoal advantages confirmed: haptics on complete, attachment preview sizes, UI existence guards, full handleCompleteTask + undo, raised swipe threshold, continuous commit discipline.
+- Actions taken:
+  - Added traceability comment in TaskViewModel multimodal calls.
+  - Deleted local GeminisGoal branch.
+  - Removed any GEMINIS_GOAL.md artifacts.
+- All reviewed multimodal improvements now consolidated on GroksGoal.
+
